@@ -1,54 +1,69 @@
 import { Link as WaspRouterLink, routes } from "wasp/client/router";
 import { Button } from "../../client/components/ui/button";
-import openSaasBannerDark from "../../client/static/open-saas-banner-dark.svg";
-import openSaasBannerLight from "../../client/static/open-saas-banner-light.svg";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function Hero() {
   return (
-    <div className="relative w-full pt-14">
+    <div className="relative w-full pt-20 pb-16 overflow-hidden">
       <TopGradient />
       <BottomGradient />
-      <div className="md:p-24">
-        <div className="max-w-8xl mx-auto px-6 lg:px-8">
-          <div className="lg:mb-18 mx-auto max-w-3xl text-center">
-            <h1 className="text-foreground text-5xl font-bold sm:text-6xl">
-              Some <span className="italic">cool</span> words about{" "}
-              <span className="text-gradient-primary">your product</span>
-            </h1>
-            <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg leading-8">
-              With some more exciting words about your product!
-            </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              <Button size="lg" variant="outline" asChild>
-                <WaspRouterLink to={routes.PricingPageRoute.to}>
-                  Learn More
-                </WaspRouterLink>
-              </Button>
-              <Button size="lg" variant="default" asChild>
-                <WaspRouterLink to={routes.SignupRoute.to}>
-                  Get Started <span aria-hidden="true">→</span>
-                </WaspRouterLink>
-              </Button>
-            </div>
+      <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl text-center">
+          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/50 px-4 py-2 text-sm backdrop-blur-sm">
+            <Sparkles className="h-4 w-4 text-blue-600" />
+            <span className="text-gray-700">AI-Powered Form Builder</span>
           </div>
-          <div className="mt-14 flow-root sm:mt-14">
-            <div className="m-2 hidden justify-center rounded-xl md:flex lg:-m-4 lg:rounded-2xl lg:p-4">
-              <img
-                src={openSaasBannerLight}
-                alt="App screenshot"
-                width={1000}
-                height={530}
-                loading="lazy"
-                className="rounded-md shadow-2xl ring-1 ring-gray-900/10 dark:hidden"
-              />
-              <img
-                src={openSaasBannerDark}
-                alt="App screenshot"
-                width={1000}
-                height={530}
-                loading="lazy"
-                className="hidden rounded-md shadow-2xl ring-1 ring-gray-900/10 dark:block"
-              />
+          <h1 className="text-foreground text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
+            Create beautiful forms{" "}
+            <span className="text-gradient-primary">in seconds</span>
+          </h1>
+          <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg leading-8 sm:text-xl">
+            Build powerful forms with AI, collect responses, and analyze results—all in one place. 
+            No coding required.
+          </p>
+          <div className="mt-10 flex items-center justify-center gap-x-4">
+            <Button size="lg" variant="default" className="text-base px-8" asChild>
+              <WaspRouterLink to={routes.SignupRoute.to}>
+                Start Building Free
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </WaspRouterLink>
+            </Button>
+            <Button size="lg" variant="outline" className="text-base px-8" asChild>
+              <WaspRouterLink to={routes.PricingPageRoute.to}>
+                View Pricing
+              </WaspRouterLink>
+            </Button>
+          </div>
+          <p className="mt-4 text-sm text-gray-500">
+            No credit card required • Free forever plan available
+          </p>
+        </div>
+        
+        {/* Form Builder Preview */}
+        <div className="mt-16">
+          <div className="relative rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-blue-600 opacity-10" />
+            <div className="relative p-8">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-12 text-center text-white min-h-[400px] flex items-center justify-center">
+                <div className="max-w-md">
+                  <h2 className="text-3xl font-bold mb-4">What did you think of your experience?</h2>
+                  <p className="text-blue-100 mb-8">Your feedback helps us improve</p>
+                  <div className="space-y-4">
+                    <div className="bg-white/20 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30 transition">
+                      ⭐ Excellent
+                    </div>
+                    <div className="bg-white/20 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30 transition">
+                      👍 Good
+                    </div>
+                    <div className="bg-white/20 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30 transition">
+                      😐 Average
+                    </div>
+                  </div>
+                  <Button className="mt-8 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-8 py-3 rounded-lg">
+                    Continue
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -60,11 +75,11 @@ export default function Hero() {
 function TopGradient() {
   return (
     <div
-      className="absolute right-0 top-0 -z-10 w-full transform-gpu overflow-hidden blur-3xl sm:top-0"
+      className="absolute right-0 top-0 -z-10 w-full transform-gpu overflow-hidden blur-3xl"
       aria-hidden="true"
     >
       <div
-        className="aspect-[1020/880] w-[70rem] flex-none bg-gradient-to-tr from-amber-400 to-purple-300 opacity-10 sm:right-1/4 sm:translate-x-1/2 dark:hidden"
+        className="aspect-[1020/880] w-[70rem] flex-none bg-gradient-to-tr from-blue-400 to-purple-300 opacity-20 sm:right-1/4 sm:translate-x-1/2"
         style={{
           clipPath:
             "polygon(80% 20%, 90% 55%, 50% 100%, 70% 30%, 20% 50%, 50% 0)",
@@ -81,7 +96,7 @@ function BottomGradient() {
       aria-hidden="true"
     >
       <div
-        className="relative aspect-[1020/880] w-[90rem] bg-gradient-to-br from-amber-400 to-purple-300 opacity-10 sm:-left-3/4 sm:translate-x-1/4 dark:hidden"
+        className="relative aspect-[1020/880] w-[90rem] bg-gradient-to-br from-blue-400 to-purple-300 opacity-20 sm:-left-3/4 sm:translate-x-1/4"
         style={{
           clipPath: "ellipse(80% 30% at 80% 50%)",
         }}

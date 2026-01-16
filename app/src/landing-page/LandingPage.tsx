@@ -11,7 +11,6 @@ import {
   footerNavigation,
   testimonials,
 } from "./contentSections";
-import AIReady from "./ExampleHighlightedFeature";
 
 export default function LandingPage() {
   return (
@@ -19,7 +18,6 @@ export default function LandingPage() {
       <main className="isolate">
         <Hero />
         <ExamplesCarousel examples={examples} />
-        <AIReady />
         <FeaturesGrid features={features} />
         <Testimonials testimonials={testimonials} />
         <FAQ faqs={faqs} />
