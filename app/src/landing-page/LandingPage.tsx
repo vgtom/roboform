@@ -1,3 +1,5 @@
+import { Navigate } from "react-router-dom";
+import { useAuth } from "wasp/client/auth";
 import ExamplesCarousel from "./components/ExamplesCarousel";
 import FAQ from "./components/FAQ";
 import FeaturesGrid from "./components/FeaturesGrid";
@@ -13,6 +15,13 @@ import {
 } from "./contentSections";
 
 export default function LandingPage() {
+  const { data: user } = useAuth();
+
+  // Redirect logged-in users to the forms app
+  if (user) {
+    return <Navigate to="/workspaces" replace />;
+  }
+
   return (
     <div className="bg-background text-foreground">
       <main className="isolate">
