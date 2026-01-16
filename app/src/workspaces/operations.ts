@@ -120,7 +120,7 @@ export const getWorkspaces: GetWorkspaces<
 
   await checkWorkspaceAccess(context.user.id, organizationId);
 
-  const workspaces = await context.entities.Workspace.findMany({
+  let workspaces = await context.entities.Workspace.findMany({
     where: { organizationId },
     select: {
       id: true,
@@ -128,8 +128,38 @@ export const getWorkspaces: GetWorkspaces<
       slug: true,
       createdAt: true,
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
   });
+
+  // If no workspaces exist, create "My Workspace"
+  if (workspaces.length === 0) {
+    const defaultWorkspace = await context.entities.Workspace.create({
+      data: {
+        name: "My Workspace",
+        slug: generateSlug("My Workspace"),
+        organizationId,
+      },
+    });
+    workspaces = [{
+      id: defaultWorkspace.id,
+      name: defaultWorkspace.name,
+      slug: defaultWorkspace.slug,
+      createdAt: defaultWorkspace.createdAt,
+    }];
+  }
+
+  // Ensure "My Workspace" exists (if user deleted it, recreate it)
+  const myWorkspaceExists = workspaces.some((w) => w.name === "My Workspace");
+  if (!myWorkspaceExists) {
+    const myWorkspace = await context.entities.Workspace.create({
+      data: {
+        name: "My Workspace",
+        slug: generateSlug("My Workspace"),
+        organizationId,
+      },
+    });
+    workspaces = [{ ...myWorkspace, id: myWorkspace.id, name: myWorkspace.name, slug: myWorkspace.slug, createdAt: myWorkspace.createdAt }, ...workspaces];
+  }
 
   return workspaces;
 };

@@ -2,6 +2,7 @@ import { HttpError, prisma } from "wasp/server";
 import type {
   CreateForm,
   GetForms,
+  GetAllForms,
   GetForm,
   UpdateForm,
   DeleteForm,
@@ -195,6 +196,76 @@ export const getForms: GetForms<
   });
 
   return forms;
+};
+
+export const getAllForms: GetAllForms<
+  { search?: string },
+  Array<{
+    id: string;
+    name: string;
+    slug: string;
+    status: FormStatus;
+    createdAt: Date;
+    updatedAt: Date;
+    workspace: { id: string; name: string };
+  }>
+> = async (rawArgs, context) => {
+  if (!context.user) {
+    throw new HttpError(401, "Authentication required");
+  }
+
+  const { search } = ensureArgsSchemaOrThrowHttpError(
+    z.object({ search: z.string().optional() }),
+    rawArgs,
+  );
+
+  // Get all organizations user is member of
+  const members = await prisma.organizationMember.findMany({
+    where: { userId: context.user.id },
+    include: { organization: { include: { workspaces: { include: { forms: true } } } } },
+  });
+
+  const allForms: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    status: FormStatus;
+    createdAt: Date;
+    updatedAt: Date;
+    workspace: { id: string; name: string };
+  }> = [];
+
+  for (const member of members) {
+    for (const workspace of member.organization.workspaces) {
+      for (const form of workspace.forms) {
+        allForms.push({
+          id: form.id,
+          name: form.name,
+          slug: form.slug,
+          status: form.status,
+          createdAt: form.createdAt,
+          updatedAt: form.updatedAt,
+          workspace: { id: workspace.id, name: workspace.name },
+        });
+      }
+    }
+  }
+
+  // Filter by search if provided
+  let filteredForms = allForms;
+  if (search && search.trim()) {
+    const searchLower = search.toLowerCase();
+    filteredForms = allForms.filter(
+      (form) =>
+        form.name.toLowerCase().includes(searchLower) ||
+        form.workspace.name.toLowerCase().includes(searchLower),
+    );
+  }
+
+  // Sort by updatedAt
+  filteredForms.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+  return filteredForms;
 };
 
 export const getForm: GetForm<

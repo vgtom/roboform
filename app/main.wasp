@@ -307,8 +307,13 @@ query getUserOrganizations {
   entities: [User, Organization, OrganizationMember]
 }
 
-action createOrganization {
-  fn: import { createOrganization } from "@src/workspaces/organizationOperations",
+action updateOrganization {
+  fn: import { updateOrganization } from "@src/workspaces/organizationOperations",
+  entities: [User, Organization, OrganizationMember]
+}
+
+action inviteOrganizationMember {
+  fn: import { inviteOrganizationMember } from "@src/workspaces/organizationOperations",
   entities: [User, Organization, OrganizationMember]
 }
 
@@ -339,6 +344,11 @@ action deleteWorkspace {
 
 query getForms {
   fn: import { getForms } from "@src/forms/operations",
+  entities: [User, Form, Workspace, Organization, OrganizationMember]
+}
+
+query getAllForms {
+  fn: import { getAllForms } from "@src/forms/operations",
   entities: [User, Form, Workspace, Organization, OrganizationMember]
 }
 
