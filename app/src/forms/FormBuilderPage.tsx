@@ -51,6 +51,14 @@ import { useToast } from "../client/hooks/use-toast";
 import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
 import { cn } from "../client/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../client/components/ui/dialog";
+import { FormSlideshow } from "./FormSlideshow";
 
 export default function FormBuilderPage() {
   const { formId, workspaceId } = useParams<{ formId: string; workspaceId: string }>();
@@ -58,6 +66,8 @@ export default function FormBuilderPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"build" | "integrate" | "share" | "results">("build");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewFormData, setPreviewFormData] = useState<Record<string, any>>({});
 
   const { data: form, isLoading, refetch: refetchForm } = useQuery(
     getForm,
@@ -240,15 +250,8 @@ export default function FormBuilderPage() {
               variant="ghost" 
               size="sm" 
               onClick={() => {
-                if (!form?.id) {
-                  toast({
-                    title: "Error",
-                    description: "Form ID not found. Please save the form first.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                window.open(`/f/${form.id}`, '_blank');
+                setPreviewFormData({});
+                setIsPreviewOpen(true);
               }}
             >
               <Eye className="h-4 w-4 mr-2" />
@@ -395,6 +398,32 @@ export default function FormBuilderPage() {
           )}
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-5xl h-[90vh] p-0">
+          <div className="h-full bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-8 flex flex-col">
+            <DialogHeader className="mb-4">
+              <DialogTitle className="text-white text-2xl">{schema.title}</DialogTitle>
+              {schema.description && (
+                <DialogDescription className="text-blue-100 text-base">
+                  {schema.description}
+                </DialogDescription>
+              )}
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden">
+              <FormSlideshow
+                schema={schema}
+                formData={previewFormData}
+                onFieldChange={(fieldId, value) => {
+                  setPreviewFormData({ ...previewFormData, [fieldId]: value });
+                }}
+                readOnly
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
