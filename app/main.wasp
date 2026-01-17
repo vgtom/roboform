@@ -412,4 +412,9 @@ action generateFormWithAI {
   fn: import { generateFormWithAI } from "@src/ai/formGeneration",
   entities: [User, Workspace, Organization, OrganizationMember]
 }
+
+action modifyFormWithAI {
+  fn: import { modifyFormWithAI } from "@src/ai/modifyFormWithAI",
+  entities: [User, Form, Workspace, Organization, OrganizationMember]
+}
 //#endregion
