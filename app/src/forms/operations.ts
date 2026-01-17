@@ -7,7 +7,7 @@ import type {
   UpdateForm,
   DeleteForm,
   PublishForm,
-  GetFormBySlug,
+  GetPublicForm,
 } from "wasp/server/operations";
 import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
@@ -40,8 +40,8 @@ const publishFormSchema = z.object({
   status: z.enum(["DRAFT", "PUBLISHED"]),
 });
 
-const getFormBySlugSchema = z.object({
-  slug: z.string(),
+const getPublicFormSchema = z.object({
+  id: z.string().uuid(),
 });
 
 async function checkFormAccess(
@@ -131,8 +131,25 @@ export const createForm: CreateForm<
 
   await checkFormAccess(context.user.id, workspaceId, OrganizationRole.EDITOR);
 
-  const slug = generateSlug(name);
-  const existing = await prisma.form.findUnique({
+  let baseSlug = generateSlug(name);
+  let slug = baseSlug;
+  
+  // Ensure slug is globally unique
+  let counter = 1;
+  let existingSlug = await prisma.form.findFirst({
+    where: { slug },
+  });
+  
+  while (existingSlug) {
+    slug = `${baseSlug}-${counter}`;
+    existingSlug = await prisma.form.findFirst({
+      where: { slug },
+    });
+    counter++;
+  }
+
+  // Also check workspace uniqueness (though global should be enough)
+  const workspaceExisting = await prisma.form.findUnique({
     where: {
       workspaceId_slug: {
         workspaceId,
@@ -141,15 +158,16 @@ export const createForm: CreateForm<
     },
   });
 
-  if (existing) {
-    throw new HttpError(400, "Form with this name already exists");
+  if (workspaceExisting) {
+    // If workspace conflict, append timestamp
+    slug = `${slug}-${Date.now().toString(36)}`;
   }
 
   const formSchema = schemaJson
     ? validateFormSchema(schemaJson)
     : DEFAULT_FORM_SCHEMA;
 
-  return context.entities.Form.create({
+  const newForm = await context.entities.Form.create({
     data: {
       name,
       slug,
@@ -158,6 +176,8 @@ export const createForm: CreateForm<
       status: FormStatus.DRAFT,
     },
   });
+
+  return newForm;
 };
 
 export const getForms: GetForms<
@@ -320,8 +340,31 @@ export const updateForm: UpdateForm<
 
   if (name && name !== form.name) {
     updateData.name = name;
-    const newSlug = generateSlug(name);
-    const existing = await prisma.form.findUnique({
+    let baseSlug = generateSlug(name);
+    let newSlug = baseSlug;
+    
+    // Ensure new slug is globally unique
+    let counter = 1;
+    let existingSlug = await prisma.form.findFirst({
+      where: { 
+        slug: newSlug,
+        id: { not: id },
+      },
+    });
+    
+    while (existingSlug) {
+      newSlug = `${baseSlug}-${counter}`;
+      existingSlug = await prisma.form.findFirst({
+        where: { 
+          slug: newSlug,
+          id: { not: id },
+        },
+      });
+      counter++;
+    }
+
+    // Check workspace uniqueness
+    const workspaceExisting = await prisma.form.findUnique({
       where: {
         workspaceId_slug: {
           workspaceId: form.workspaceId,
@@ -330,10 +373,17 @@ export const updateForm: UpdateForm<
       },
     });
 
-    if (existing && existing.id !== id) {
-      throw new HttpError(400, "Form with this name already exists");
+    if (workspaceExisting && workspaceExisting.id !== id) {
+      // If workspace conflict, append timestamp
+      newSlug = `${newSlug}-${Date.now().toString(36)}`;
     }
+    
     updateData.slug = newSlug;
+  }
+  
+  // Ensure form always has a slug (in case it was created without one)
+  if (!form.slug && !updateData.slug) {
+    updateData.slug = generateSlug(form.name || "untitled-form");
   }
 
   if (schemaJson !== undefined) {
@@ -406,24 +456,52 @@ export const publishForm: PublishForm<
   });
 };
 
-export const getFormBySlug: GetFormBySlug<
-  z.infer<typeof getFormBySlugSchema>,
+export const getPublicForm: GetPublicForm<
+  z.infer<typeof getPublicFormSchema>,
   { id: string; name: string; slug: string; schemaJson: any; status: FormStatus }
 > = async (rawArgs, context) => {
-  const { slug } = ensureArgsSchemaOrThrowHttpError(
-    getFormBySlugSchema,
+  const { id } = ensureArgsSchemaOrThrowHttpError(
+    getPublicFormSchema,
     rawArgs,
   );
 
-  const form = await prisma.form.findFirst({
+  // Try to find published form first (public access)
+  let form = await prisma.form.findUnique({
     where: {
-      slug,
+      id,
       status: FormStatus.PUBLISHED,
     },
   });
 
+  // If not published and user is authenticated, check if they own/have access to draft
+  if (!form && context.user) {
+    const userForm = await prisma.form.findUnique({
+      where: { id },
+      include: {
+        workspace: {
+          include: {
+            organization: {
+              include: { members: true },
+            },
+          },
+        },
+      },
+    });
+    
+    if (userForm) {
+      // Check access permission
+      const member = userForm.workspace.organization.members.find(
+        (m) => m.userId === context.user!.id,
+      );
+      
+      if (member) {
+        form = userForm;
+      }
+    }
+  }
+
   if (!form) {
-    throw new HttpError(404, "Form not found");
+    throw new HttpError(404, "Form not found or not published");
   }
 
   return form;

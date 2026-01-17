@@ -29,12 +29,18 @@ export default function App() {
   const shouldDisplayAppNavBar = useMemo(() => {
     return (
       location.pathname !== routes.LoginRoute.build() &&
-      location.pathname !== routes.SignupRoute.build()
+      location.pathname !== routes.SignupRoute.build() &&
+      !location.pathname.includes("/forms/") &&
+      !location.pathname.includes("/edit")
     );
   }, [location]);
 
   const isAdminDashboard = useMemo(() => {
     return location.pathname.startsWith("/admin");
+  }, [location]);
+
+  const isFormBuilder = useMemo(() => {
+    return location.pathname.includes("/forms/") && location.pathname.includes("/edit");
   }, [location]);
 
   useEffect(() => {
@@ -51,6 +57,8 @@ export default function App() {
     <>
       <div className="bg-background text-foreground min-h-screen">
         {isAdminDashboard ? (
+          <Outlet />
+        ) : isFormBuilder ? (
           <Outlet />
         ) : (
           <>

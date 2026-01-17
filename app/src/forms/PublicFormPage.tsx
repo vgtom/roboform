@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "wasp/client/operations";
-import { getFormBySlug, submitFormResponse, trackFormView } from "wasp/client/operations";
+import { getPublicForm, submitFormResponse, trackFormView } from "wasp/client/operations";
 import { useParams } from "react-router-dom";
 import { Button } from "../client/components/ui/button";
 import { Input } from "../client/components/ui/input";
@@ -18,14 +18,14 @@ import { CheckCircle2 } from "lucide-react";
 import { FormSchema, FormField } from "../shared/formTypes";
 
 export default function PublicFormPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { formId } = useParams<{ formId: string }>();
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
 
   const { data: form, isLoading } = useQuery(
-    getFormBySlug,
-    slug ? { slug } : undefined,
+    getPublicForm,
+    formId ? { id: formId } : undefined,
   );
 
   useEffect(() => {

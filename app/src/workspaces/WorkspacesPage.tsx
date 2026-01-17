@@ -54,13 +54,16 @@ import {
   Copy,
   ChevronDown,
   LayoutTemplate,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
 import { PaymentPlanId } from "../payment/plans";
 import { OrganizationRole } from "@prisma/client";
-import { createForm } from "wasp/client/operations";
+import { createForm, generateFormWithAI } from "wasp/client/operations";
 import { FORM_TEMPLATES } from "../templates/templates";
 import { deleteForm } from "wasp/client/operations";
+import { Textarea } from "../client/components/ui/textarea";
 
 export default function WorkspacesPage() {
   const { data: user } = useAuth();
@@ -75,6 +78,9 @@ export default function WorkspacesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [newFormName, setNewFormName] = useState("");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [createFormMode, setCreateFormMode] = useState<"manual" | "ai">("manual");
 
   const { data: organizations, isLoading: orgsLoading } = useQuery(
     getUserOrganizations,
@@ -169,6 +175,50 @@ export default function WorkspacesPage() {
         description: error.message || "Failed to create form",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleGenerateWithAI = async () => {
+    if (!selectedWorkspaceId || !aiPrompt.trim() || aiPrompt.trim().length < 10) {
+      toast({
+        title: "Error",
+        description: "Please enter a prompt with at least 10 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const generatedSchema = await generateFormWithAI({
+        workspaceId: selectedWorkspaceId,
+        prompt: aiPrompt.trim(),
+      });
+
+      // Create form with generated schema
+      const formName = generatedSchema.title || "AI Generated Form";
+      const result = await createForm({
+        workspaceId: selectedWorkspaceId,
+        name: formName,
+        schemaJson: generatedSchema,
+      });
+
+      setAiPrompt("");
+      setIsCreateFormOpen(false);
+      setCreateFormMode("manual");
+      toast({
+        title: "Form generated!",
+        description: "Your form has been created with AI. You can edit it now.",
+      });
+      navigate(`/workspaces/${selectedWorkspaceId}/forms/${result.id}/edit`);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate form with AI",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -301,42 +351,112 @@ export default function WorkspacesPage() {
           />
         </div>
 
-        <Dialog open={isCreateFormOpen} onOpenChange={setIsCreateFormOpen}>
+        <Dialog 
+          open={isCreateFormOpen} 
+          onOpenChange={(open) => {
+            setIsCreateFormOpen(open);
+            if (!open) {
+              // Reset state when dialog closes
+              setCreateFormMode("manual");
+              setNewFormName("");
+              setAiPrompt("");
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               Create Form
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create New Form</DialogTitle>
               <DialogDescription>
-                Start from scratch or use a template.
+                Start from scratch, use AI, or choose a template.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <Label>Form Name</Label>
-                <Input
-                  value={newFormName}
-                  onChange={(e) => setNewFormName(e.target.value)}
-                  placeholder="Enter form name"
-                  className="mt-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newFormName.trim()) {
-                      handleCreateForm();
-                    }
-                  }}
-                />
+              {/* Mode Toggle */}
+              <div className="flex gap-2 border-b pb-3">
+                <Button
+                  variant={createFormMode === "manual" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setCreateFormMode("manual")}
+                  className="flex-1"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Manual
+                </Button>
+                <Button
+                  variant={createFormMode === "ai" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setCreateFormMode("ai")}
+                  className="flex-1"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  AI Generate
+                </Button>
               </div>
-              <Button
-                onClick={() => handleCreateForm()}
-                className="w-full"
-                disabled={!newFormName.trim()}
-              >
-                Create from Scratch
-              </Button>
+
+              {createFormMode === "manual" ? (
+                <>
+                  <div>
+                    <Label>Form Name</Label>
+                    <Input
+                      value={newFormName}
+                      onChange={(e) => setNewFormName(e.target.value)}
+                      placeholder="Enter form name"
+                      className="mt-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newFormName.trim()) {
+                          handleCreateForm();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button
+                    onClick={() => handleCreateForm()}
+                    className="w-full"
+                    disabled={!newFormName.trim()}
+                  >
+                    Create from Scratch
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label>Describe your form</Label>
+                    <Textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
+                      className="mt-1 min-h-[120px]"
+                      disabled={isGenerating}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Describe what kind of form you want to create. AI will generate the form structure for you.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleGenerateWithAI}
+                    className="w-full"
+                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate Form with AI
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
               {isMyWorkspace && (
                 <>
                   <div className="relative">
@@ -412,7 +532,7 @@ export default function WorkspacesPage() {
                       variant="outline"
                       size="icon"
                       onClick={() => {
-                        const url = `${window.location.origin}/f/${form.slug}`;
+                        const url = `${window.location.origin}/f/${form.id}`;
                         navigator.clipboard.writeText(url);
                         toast({
                           title: "Link copied",

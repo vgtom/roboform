@@ -59,7 +59,7 @@ export default function FormBuilderPage() {
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"build" | "integrate" | "share" | "results">("build");
 
-  const { data: form, isLoading } = useQuery(
+  const { data: form, isLoading, refetch: refetchForm } = useQuery(
     getForm,
     formId ? { id: formId } : undefined,
   );
@@ -69,11 +69,26 @@ export default function FormBuilderPage() {
   useEffect(() => {
     if (form?.schemaJson) {
       setSchema(form.schemaJson as FormSchema);
-      if (form.schemaJson.fields && form.schemaJson.fields.length > 0) {
+      if (form.schemaJson.fields && form.schemaJson.fields.length > 0 && !selectedFieldId) {
         setSelectedFieldId(form.schemaJson.fields[0].id);
       }
     }
   }, [form]);
+
+  // Ensure form has a slug - if not, generate one
+  useEffect(() => {
+    if (form && !form.slug && formId) {
+      // Form doesn't have a slug, update it
+      updateForm({
+        id: formId,
+        name: form.name,
+      }).then(() => {
+        refetchForm();
+      }).catch(() => {
+        // Silent fail
+      });
+    }
+  }, [form, formId, refetchForm]);
 
   const handleSave = async () => {
     if (!formId) return;
@@ -221,17 +236,37 @@ export default function FormBuilderPage() {
             </Breadcrumb>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => window.open(`/f/${form.slug}`, '_blank')}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => {
+                if (!form?.id) {
+                  toast({
+                    title: "Error",
+                    description: "Form ID not found. Please save the form first.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                window.open(`/f/${form.id}`, '_blank');
+              }}
+            >
               <Eye className="h-4 w-4 mr-2" />
               Preview
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => {
-              const url = `${window.location.origin}/f/${form.slug}`;
-              navigator.clipboard.writeText(url);
-              toast({ title: "Link copied", description: "Form link copied to clipboard" });
-            }}>
-              <ExternalLink className="h-4 w-4 mr-2" />
-            </Button>
+            {form.status === "PUBLISHED" && form.id && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => {
+                  const url = `${window.location.origin}/f/${form.id}`;
+                  navigator.clipboard.writeText(url);
+                  toast({ title: "Link copied", description: "Form link copied to clipboard" });
+                }}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+              </Button>
+            )}
             <Button onClick={handlePublish} size="sm">
               <Send className="h-4 w-4 mr-2" />
               {form.status === "PUBLISHED" ? "Unpublish" : "Publish"}
@@ -329,19 +364,7 @@ export default function FormBuilderPage() {
         {/* Center - Preview */}
         <div className="flex-1 bg-gradient-to-br from-blue-500 to-blue-600 overflow-y-auto relative">
           <div className="min-h-full flex items-center justify-center p-12">
-            {selectedField ? (
-              <FormBlockPreview field={selectedField} schema={schema} />
-            ) : (
-              <div className="text-center text-white">
-                <h2 className="text-3xl font-bold mb-2">{schema.title || "Untitled Form"}</h2>
-                {schema.description && (
-                  <p className="text-blue-100 mb-8">{schema.description}</p>
-                )}
-                <Button className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-8 py-3 rounded-lg">
-                  {schema.fields.length === 0 ? "Add your first question" : "Continue"}
-                </Button>
-              </div>
-            )}
+            <FormPreview schema={schema} selectedFieldId={selectedFieldId} />
           </div>
         </div>
 
@@ -429,18 +452,44 @@ function BlockItem({
   );
 }
 
-function FormBlockPreview({ field, schema }: { field: FormField; schema: FormSchema }) {
+function FormPreview({
+  schema,
+  selectedFieldId,
+}: {
+  schema: FormSchema;
+  selectedFieldId: string | null;
+}) {
+  if (schema.fields.length === 0) {
+    return (
+      <div className="w-full max-w-2xl text-center text-white">
+        <h2 className="text-3xl font-bold mb-2">{schema.title || "Untitled Form"}</h2>
+        {schema.description && (
+          <p className="text-blue-100 mb-8">{schema.description}</p>
+        )}
+        <Button className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-8 py-3 rounded-lg">
+          Add your first question
+        </Button>
+      </div>
+    );
+  }
+
+  const selectedIndex = selectedFieldId
+    ? schema.fields.findIndex((f) => f.id === selectedFieldId)
+    : 0;
+
+  const currentField = schema.fields[selectedIndex] || schema.fields[0];
+
   return (
     <div className="w-full max-w-2xl text-center text-white">
-      <h2 className="text-3xl font-bold mb-2">{field.label}</h2>
-      {field.placeholder && (
-        <p className="text-blue-100 mb-8">{field.placeholder}</p>
+      <h2 className="text-3xl font-bold mb-2">{currentField.label || "Untitled Question"}</h2>
+      {currentField.placeholder && (
+        <p className="text-blue-100 mb-8">{currentField.placeholder}</p>
       )}
       <div className="mt-8">
-        {renderPreviewField(field)}
+        {renderPreviewField(currentField)}
       </div>
       <Button className="mt-8 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-8 py-3 rounded-lg">
-        Continue
+        {selectedIndex < schema.fields.length - 1 ? "Continue" : "Submit"}
       </Button>
     </div>
   );
@@ -451,32 +500,91 @@ function renderPreviewField(field: FormField) {
     case "textarea":
       return (
         <Textarea
-          placeholder={field.placeholder}
-          className="bg-white/20 border-white/30 text-white placeholder:text-white/70"
+          placeholder={field.placeholder || "Enter your response..."}
+          className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full"
           rows={4}
           disabled
         />
       );
     case "select":
+      return (
+        <Select disabled>
+          <SelectTrigger className="bg-white/20 border-white/30 text-white w-full">
+            <SelectValue placeholder={field.placeholder || "Select an option..."} />
+          </SelectTrigger>
+          <SelectContent>
+            {field.options?.map((opt) => (
+              <SelectItem key={opt} value={opt}>
+                {opt}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
     case "radio":
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 w-full">
           {field.options?.map((opt) => (
             <div
               key={opt}
-              className="bg-white/20 border border-white/30 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30"
+              className="bg-white/20 border border-white/30 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30 transition"
             >
               {opt}
             </div>
           ))}
         </div>
       );
+    case "checkbox":
+      return (
+        <div className="flex items-center gap-3 justify-center">
+          <div className="h-5 w-5 border-2 border-white/30 rounded bg-white/20" />
+          <span className="text-white">{field.label}</span>
+        </div>
+      );
+    case "multiselect":
+      return (
+        <div className="space-y-2 w-full text-left">
+          {field.options?.map((opt) => (
+            <div key={opt} className="flex items-center gap-3">
+              <div className="h-5 w-5 border-2 border-white/30 rounded bg-white/20" />
+              <span className="text-white">{opt}</span>
+            </div>
+          ))}
+        </div>
+      );
+    case "email":
+      return (
+        <Input
+          type="email"
+          placeholder={field.placeholder || "Enter your email..."}
+          className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full"
+          disabled
+        />
+      );
+    case "number":
+      return (
+        <Input
+          type="number"
+          placeholder={field.placeholder || "Enter a number..."}
+          className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full"
+          disabled
+        />
+      );
+    case "date":
+      return (
+        <Input
+          type="date"
+          placeholder={field.placeholder || "Select a date..."}
+          className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full"
+          disabled
+        />
+      );
     default:
       return (
         <Input
-          type={field.type === "email" ? "email" : field.type === "number" ? "number" : "text"}
-          placeholder={field.placeholder}
-          className="bg-white/20 border-white/30 text-white placeholder:text-white/70"
+          type="text"
+          placeholder={field.placeholder || "Enter your answer..."}
+          className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full"
           disabled
         />
       );
