@@ -51,3 +51,24 @@ export function throttleWithTrailingInvocation<T extends (...args: any[]) => any
 
   return throttled;
 }
+
+// Generate a consistent random color based on a string ID
+export function getRandomColorForId(id: string, opacity: number = 0.1): string {
+  // Simple hash function to convert string to number
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Generate RGB values based on hash
+  const r = (hash & 0xFF0000) >> 16;
+  const g = (hash & 0x00FF00) >> 8;
+  const b = hash & 0x0000FF;
+  
+  // Normalize to 0-255 and adjust for pleasant colors
+  const normalizedR = Math.abs((r + 50) % 200) + 30;
+  const normalizedG = Math.abs((g + 50) % 200) + 30;
+  const normalizedB = Math.abs((b + 50) % 200) + 30;
+  
+  return `rgba(${normalizedR}, ${normalizedG}, ${normalizedB}, ${opacity})`;
+}

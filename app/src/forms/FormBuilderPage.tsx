@@ -365,8 +365,8 @@ export default function FormBuilderPage() {
         </div>
 
         {/* Center - Preview */}
-        <div className="flex-1 bg-gradient-to-br from-blue-500 to-blue-600 overflow-y-auto relative">
-          <div className="min-h-full flex items-center justify-center p-12">
+        <div className="flex-1 bg-gradient-to-br from-blue-500 to-blue-600 overflow-y-auto relative mb-4">
+          <div className="min-h-full flex items-center justify-center p-8">
             <FormPreview schema={schema} selectedFieldId={selectedFieldId} />
           </div>
         </div>

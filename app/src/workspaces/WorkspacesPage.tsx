@@ -47,7 +47,6 @@ import {
   FolderOpen,
   Settings,
   Users,
-  Crown,
   Search,
   FileText,
   Trash2,
@@ -64,6 +63,8 @@ import { createForm, generateFormWithAI } from "wasp/client/operations";
 import { FORM_TEMPLATES } from "../templates/templates";
 import { deleteForm } from "wasp/client/operations";
 import { Textarea } from "../client/components/ui/textarea";
+import { WorkspaceNavBar } from "./WorkspaceNavBar";
+import { getRandomColorForId } from "../shared/utils";
 
 export default function WorkspacesPage() {
   const { data: user } = useAuth();
@@ -204,8 +205,6 @@ export default function WorkspacesPage() {
       });
 
       setAiPrompt("");
-      setIsCreateFormOpen(false);
-      setCreateFormMode("manual");
       toast({
         title: "Form generated!",
         description: "Your form has been created with AI. You can edit it now.",
@@ -259,56 +258,65 @@ export default function WorkspacesPage() {
   const isMyWorkspace = selectedWorkspace?.name === "My Workspace";
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold mb-2">Forms</h1>
-          <p className="text-muted-foreground">Create and manage your forms</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {isPro && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsOrgSettingsOpen(true)}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsInviteDialogOpen(true)}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Invite
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Custom Navbar */}
+      <WorkspaceNavBar
+        organizations={organizations || []}
+        selectedOrgId={selectedOrgId}
+        onOrgChange={setSelectedOrgId}
+        onSettingsClick={() => setIsOrgSettingsOpen(true)}
+        onInviteClick={() => setIsInviteDialogOpen(true)}
+      />
 
-      {/* PRO Upgrade Banner */}
-      {!isPro && (
-        <Card className="mb-6 border-yellow-200 bg-yellow-50">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Crown className="h-5 w-5 text-yellow-600" />
-              <div>
-                <p className="font-semibold text-yellow-900">Upgrade to PRO</p>
-                <p className="text-sm text-yellow-700">
-                  Unlock team collaboration, organization customization, and more
+      <div className="container mx-auto p-6 max-w-7xl">
+        {/* AI Powered Quick Generate Form */}
+        <Card className="mb-6 border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-purple-50 shadow-lg">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-500 p-3">
+                <Sparkles className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold mb-1 text-gray-900">AI Powered Quick Generate Form</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Describe your form and let AI generate it instantly. No need to build from scratch!
+                </p>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
+                      className="min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400"
+                      disabled={isGenerating}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleGenerateWithAI}
+                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating || !selectedWorkspaceId}
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-6 h-[80px] whitespace-nowrap"
+                    size="lg"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Generate Form
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Minimum 10 characters required. AI will create your form structure automatically.
                 </p>
               </div>
             </div>
-            <Button asChild variant="default">
-              <Link to="/pricing">Upgrade</Link>
-            </Button>
           </CardContent>
         </Card>
-      )}
 
       {/* Workspace Selector and Actions */}
       <div className="flex items-center gap-4 mb-6">
@@ -366,14 +374,14 @@ export default function WorkspacesPage() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Create Form
+              Create AI Form
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create New Form</DialogTitle>
+              <DialogTitle>Create AI Form</DialogTitle>
               <DialogDescription>
-                Start from scratch, use AI, or choose a template.
+                Build your form manually or let AI generate it from your description.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -420,7 +428,7 @@ export default function WorkspacesPage() {
                     className="w-full"
                     disabled={!newFormName.trim()}
                   >
-                    Create from Scratch
+                    Create Blank Form
                   </Button>
                 </>
               ) : (
@@ -476,6 +484,10 @@ export default function WorkspacesPage() {
                         variant="outline"
                         onClick={() => handleCreateForm(templateName)}
                         className="h-auto py-3 flex-col items-start"
+                        style={{
+                          backgroundColor: getRandomColorForId(templateName, 0.12),
+                          borderColor: getRandomColorForId(templateName, 0.3),
+                        }}
                       >
                         <LayoutTemplate className="h-5 w-5 mb-1" />
                         <span className="text-xs">
@@ -497,7 +509,13 @@ export default function WorkspacesPage() {
       ) : displayedForms && displayedForms.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayedForms.map((form) => (
-            <Card key={form.id} className="hover:shadow-lg transition-shadow">
+            <Card 
+              key={form.id} 
+              className="hover:shadow-lg transition-shadow"
+              style={{ 
+                backgroundColor: getRandomColorForId(form.id, 0.08),
+              }}
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -570,7 +588,7 @@ export default function WorkspacesPage() {
         </Card>
       )}
 
-      {/* Organization Settings Dialog */}
+      {/* Organization Settings Dialog - Now accessible via navbar */}
       {isPro && selectedOrg && (
         <OrganizationSettingsDialog
           organization={selectedOrg}
@@ -614,6 +632,7 @@ export default function WorkspacesPage() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

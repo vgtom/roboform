@@ -111,12 +111,12 @@ export default function WorkspaceDashboardPage() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Create Form
+              Create AI Form
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New Form</DialogTitle>
+              <DialogTitle>Create AI Form</DialogTitle>
               <DialogDescription>
                 Give your form a name. You can edit it later.
               </DialogDescription>

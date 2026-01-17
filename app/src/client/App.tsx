@@ -31,8 +31,22 @@ export default function App() {
       location.pathname !== routes.LoginRoute.build() &&
       location.pathname !== routes.SignupRoute.build() &&
       !location.pathname.includes("/forms/") &&
-      !location.pathname.includes("/edit")
+      !location.pathname.includes("/edit") &&
+      !location.pathname.startsWith("/workspaces") &&
+      !location.pathname.startsWith("/f/")
     );
+  }, [location]);
+
+  const isWorkspacesPage = useMemo(() => {
+    return location.pathname.startsWith("/workspaces") && !location.pathname.includes("/organization/");
+  }, [location]);
+
+  const isOrganizationPages = useMemo(() => {
+    return location.pathname.includes("/workspaces/organization/");
+  }, [location]);
+
+  const isPublicFormPage = useMemo(() => {
+    return location.pathname.startsWith("/f/");
   }, [location]);
 
   const isAdminDashboard = useMemo(() => {
@@ -59,6 +73,8 @@ export default function App() {
         {isAdminDashboard ? (
           <Outlet />
         ) : isFormBuilder ? (
+          <Outlet />
+        ) : isWorkspacesPage || isOrganizationPages ? (
           <Outlet />
         ) : (
           <>

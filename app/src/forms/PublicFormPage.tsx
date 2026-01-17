@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { useQuery } from "wasp/client/operations";
 import { getPublicForm, submitFormResponse, trackFormView } from "wasp/client/operations";
 import { useParams } from "react-router-dom";
+import { useAuth } from "wasp/client/auth";
 import { FormSlideshow } from "./FormSlideshow";
 import { FormSchema } from "../shared/formTypes";
+import { UserDropdown } from "../user/UserDropdown";
 
 export default function PublicFormPage() {
   const { formId } = useParams<{ formId: string }>();
+  const { data: user } = useAuth();
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -66,26 +69,37 @@ export default function PublicFormPage() {
   const schema = form.schemaJson as FormSchema;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl h-full min-h-[600px] flex flex-col">
-        {/* Form Title */}
-        <div className="text-center mb-6">
-          <h1 className="text-4xl font-bold text-white mb-2">{schema.title}</h1>
-          {schema.description && (
-            <p className="text-blue-100 text-lg">{schema.description}</p>
-          )}
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-blue-600 flex flex-col">
+      {/* Navbar - Only show if user is logged in */}
+      {user && (
+        <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="container mx-auto flex h-16 items-center justify-end px-4">
+            <UserDropdown user={user} />
+          </div>
+        </header>
+      )}
 
-        {/* Slideshow Container */}
-        <div className="flex-1 bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
-          <FormSlideshow
-            schema={schema}
-            formData={formData}
-            onFieldChange={updateField}
-            onSubmit={handleSubmit}
-            isSubmitting={isSubmitting}
-            submitted={submitted}
-          />
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl h-full min-h-[600px] flex flex-col">
+          {/* Form Title */}
+          <div className="text-center mb-6">
+            <h1 className="text-4xl font-bold text-white mb-2">{schema.title}</h1>
+            {schema.description && (
+              <p className="text-blue-100 text-lg">{schema.description}</p>
+            )}
+          </div>
+
+          {/* Slideshow Container */}
+          <div className="flex-1 bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
+            <FormSlideshow
+              schema={schema}
+              formData={formData}
+              onFieldChange={updateField}
+              onSubmit={handleSubmit}
+              isSubmitting={isSubmitting}
+              submitted={submitted}
+            />
+          </div>
         </div>
       </div>
     </div>
