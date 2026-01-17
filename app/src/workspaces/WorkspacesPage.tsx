@@ -55,6 +55,7 @@ import {
   LayoutTemplate,
   Sparkles,
   Loader2,
+  Crown,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
 import { PaymentPlanId } from "../payment/plans";
@@ -114,6 +115,9 @@ export default function WorkspacesPage() {
   const selectedOrg = organizations?.find((org) => org.id === selectedOrgId);
   const selectedWorkspace = workspaces?.find((w) => w.id === selectedWorkspaceId);
   const isPro = user?.subscriptionPlan === PaymentPlanId.Pro;
+  const aiUsageCount = user?.aiUsageCount || 0;
+  const FREE_TIER_AI_LIMIT = 2;
+  const isAIDisabled = !isPro && aiUsageCount >= FREE_TIER_AI_LIMIT;
 
   // Filter forms by selected workspace if one is selected
   const displayedForms = useMemo(() => {
@@ -281,38 +285,64 @@ export default function WorkspacesPage() {
                 <p className="text-sm text-gray-600 mb-4">
                   Describe your form and let AI generate it instantly. No need to build from scratch!
                 </p>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <Textarea
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
-                      className="min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400"
-                      disabled={isGenerating}
-                    />
+                {isAIDisabled ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Crown className="h-5 w-5 text-yellow-600" />
+                        <div>
+                          <p className="font-semibold text-yellow-900">AI Features Disabled</p>
+                          <p className="text-sm text-yellow-700">
+                            You've reached the free tier limit. Upgrade to PRO for unlimited AI features.
+                          </p>
+                        </div>
+                      </div>
+                      <Button asChild variant="default" size="sm">
+                        <Link to="/pricing">Upgrade to PRO</Link>
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    onClick={handleGenerateWithAI}
-                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating || !selectedWorkspaceId}
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-6 h-[80px] whitespace-nowrap"
-                    size="lg"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-5 w-5 mr-2" />
-                        Generate Form
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Minimum 10 characters required. AI will create your form structure automatically.
-                </p>
+                ) : (
+                  <>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <Textarea
+                          value={aiPrompt}
+                          onChange={(e) => setAiPrompt(e.target.value)}
+                          placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
+                          className="min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400"
+                          disabled={isGenerating || isAIDisabled}
+                        />
+                        {!isPro && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {FREE_TIER_AI_LIMIT - aiUsageCount} free AI uses remaining
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        onClick={handleGenerateWithAI}
+                        disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating || !selectedWorkspaceId || isAIDisabled}
+                        className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-6 h-[80px] whitespace-nowrap"
+                        size="lg"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-5 w-5 mr-2" />
+                            Generate Form
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Minimum 10 characters required. AI will create your form structure automatically.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>

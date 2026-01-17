@@ -21,6 +21,7 @@ model User {
   subscriptionPlan          String?         // 'hobby', 'pro'
   datePaid                  DateTime?
   credits                   Int             @default(3)
+  aiUsageCount              Int             @default(0) // Track AI feature usage for free tier
 
   gptResponses              GptResponse[]
   contactFormMessages       ContactFormMessage[]

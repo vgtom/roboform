@@ -52,11 +52,22 @@ import {
   Workflow,
   Palette,
   Crown,
+  Rocket,
+  Copy,
+  Check,
+  Share2,
+  Code,
+  Settings,
+  Link2,
+  QrCode,
+  X,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
 import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
 import { cn } from "../client/utils";
+import { useAuth } from "wasp/client/auth";
+import { PaymentPlanId } from "../payment/plans";
 import {
   Dialog,
   DialogContent,
@@ -77,13 +88,20 @@ export default function FormBuilderPage() {
   const [previewFormData, setPreviewFormData] = useState<Record<string, any>>({});
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPublishSuccessOpen, setIsPublishSuccessOpen] = useState(false);
 
+  const { data: user } = useAuth();
   const { data: form, isLoading, refetch: refetchForm } = useQuery(
     getForm,
     formId ? { id: formId } : undefined,
   );
 
   const [schema, setSchema] = useState<FormSchema>(DEFAULT_FORM_SCHEMA);
+  
+  const isPro = user?.subscriptionPlan === PaymentPlanId.Pro;
+  const aiUsageCount = user?.aiUsageCount || 0;
+  const FREE_TIER_AI_LIMIT = 2;
+  const isAIDisabled = !isPro && aiUsageCount >= FREE_TIER_AI_LIMIT;
 
   useEffect(() => {
     if (form?.schemaJson) {
@@ -134,15 +152,25 @@ export default function FormBuilderPage() {
 
   const handlePublish = async () => {
     if (!formId) return;
+    const wasPublished = form?.status === "PUBLISHED";
     try {
       await publishForm({
         id: formId,
-        status: form?.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED",
+        status: wasPublished ? "DRAFT" : "PUBLISHED",
       });
-      toast({
-        title: form?.status === "PUBLISHED" ? "Unpublished" : "Published",
-        description: `Form has been ${form?.status === "PUBLISHED" ? "unpublished" : "published"} successfully.`,
-      });
+      
+      // Refetch form to get updated status
+      refetchForm();
+      
+      if (!wasPublished) {
+        // Show success modal only when publishing (not unpublishing)
+        setIsPublishSuccessOpen(true);
+      } else {
+        toast({
+          title: "Unpublished",
+          description: "Form has been unpublished successfully.",
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -228,6 +256,15 @@ export default function FormBuilderPage() {
   }
 
   const handleAIFormChange = async () => {
+    if (isAIDisabled) {
+      toast({
+        title: "AI Features Disabled",
+        description: `You've reached the free tier limit of ${FREE_TIER_AI_LIMIT} AI requests. Upgrade to PRO for unlimited AI features.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!aiPrompt.trim() || aiPrompt.trim().length < 10) {
       toast({
         title: "Error",
@@ -264,16 +301,25 @@ export default function FormBuilderPage() {
       });
 
       setAiPrompt("");
+      const remainingUses = isPro ? "unlimited" : `${FREE_TIER_AI_LIMIT - (aiUsageCount + 1)} remaining`;
       toast({
         title: "Form updated!",
-        description: "Your form has been modified with AI and saved successfully.",
+        description: `Your form has been modified with AI and saved successfully. ${!isPro ? `(${remainingUses} free uses)` : ""}`,
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to modify form with AI",
-        variant: "destructive",
-      });
+      if (error.message?.includes("AI features are disabled")) {
+        toast({
+          title: "AI Features Disabled",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to modify form with AI",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -474,35 +520,61 @@ export default function FormBuilderPage() {
 
             {/* AI Prompt Box for Form Changes */}
             <div className="border-b border-gray-200 p-4 bg-gray-50">
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Textarea
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="Describe changes you want to make to this form... (e.g., 'Add a phone number field', 'Make the email field required')"
-                    className="min-h-[60px] resize-none text-sm"
-                    disabled={isGenerating}
-                  />
+              {isAIDisabled ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Crown className="h-5 w-5 text-yellow-600" />
+                      <div>
+                        <p className="font-semibold text-yellow-900">AI Features Disabled</p>
+                        <p className="text-sm text-yellow-700">
+                          You've reached the free tier limit. Upgrade to PRO for unlimited AI features.
+                        </p>
+                      </div>
+                    </div>
+                    <Button asChild variant="default" size="sm">
+                      <Link to="/pricing">Upgrade to PRO</Link>
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  onClick={handleAIFormChange}
-                  disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating}
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-4 h-[60px] whitespace-nowrap"
-                  size="sm"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Apply AI
-                    </>
-                  )}
-                </Button>
-              </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder="Describe changes you want to make to this form... (e.g., 'Add a phone number field', 'Make the email field required')"
+                        className="min-h-[60px] resize-none text-sm"
+                        disabled={isGenerating || isAIDisabled}
+                      />
+                      {!isPro && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {FREE_TIER_AI_LIMIT - aiUsageCount} free AI uses remaining
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleAIFormChange}
+                      disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating || isAIDisabled}
+                      className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-4 h-[60px] whitespace-nowrap"
+                      size="sm"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Apply AI
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Selected Question/Block Display */}
@@ -593,7 +665,225 @@ export default function FormBuilderPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Publish Success Modal */}
+      {form && form.id && (
+        <PublishSuccessModal
+          formId={form.id}
+          formName={form.name}
+          isOpen={isPublishSuccessOpen}
+          onClose={() => setIsPublishSuccessOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function PublishSuccessModal({
+  formId,
+  formName,
+  isOpen,
+  onClose,
+}: {
+  formId: string;
+  formName: string;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
+  const formUrl = `${window.location.origin}/f/${formId}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(formUrl);
+    setCopied(true);
+    toast({
+      title: "Link copied!",
+      description: "Form URL has been copied to clipboard.",
+    });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = (platform: string) => {
+    const shareUrl = encodeURIComponent(formUrl);
+    const shareText = encodeURIComponent(`Check out this form: ${formName}`);
+    let url = "";
+
+    switch (platform) {
+      case "facebook":
+        url = `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`;
+        break;
+      case "twitter":
+        url = `https://twitter.com/intent/tweet?url=${shareUrl}&text=${shareText}`;
+        break;
+      case "linkedin":
+        url = `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`;
+        break;
+      default:
+        return;
+    }
+
+    window.open(url, "_blank", "width=600,height=400");
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl p-0 overflow-hidden">
+        <div className="relative bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50">
+          {/* Close Button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 rounded-full p-2 hover:bg-white/20 transition-colors"
+          >
+            <X className="h-5 w-5 text-gray-600" />
+          </button>
+
+          <div className="p-8">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 mb-4">
+                <Rocket className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Your form is now live! 🎉
+              </h2>
+              <p className="text-gray-600">
+                Share your form with the world and start collecting responses
+              </p>
+            </div>
+
+            {/* Share Section */}
+            <div className="bg-white rounded-xl p-6 mb-6 shadow-sm border border-gray-200">
+              <label className="text-sm font-semibold text-gray-700 mb-3 block">
+                Share it with the world:
+              </label>
+              <div className="flex gap-2 mb-4">
+                <Input
+                  value={formUrl}
+                  readOnly
+                  className="flex-1 bg-gray-50 border-gray-200"
+                />
+                <Button
+                  onClick={handleCopy}
+                  variant={copied ? "default" : "outline"}
+                  className={copied ? "bg-green-500 hover:bg-green-600" : ""}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Social Share Icons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => window.open(formUrl, "_blank")}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Open in new tab"
+                >
+                  <ExternalLink className="h-5 w-5 text-gray-600" />
+                </button>
+                <button
+                  onClick={() => handleShare("facebook")}
+                  className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                  title="Share on Facebook"
+                >
+                  <Share2 className="h-5 w-5 text-blue-600" />
+                </button>
+                <button
+                  onClick={() => handleShare("twitter")}
+                  className="p-2 rounded-lg hover:bg-sky-50 transition-colors"
+                  title="Share on X/Twitter"
+                >
+                  <Share2 className="h-5 w-5 text-sky-600" />
+                </button>
+                <button
+                  onClick={() => handleShare("linkedin")}
+                  className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                  title="Share on LinkedIn"
+                >
+                  <Share2 className="h-5 w-5 text-blue-700" />
+                </button>
+                <button
+                  onClick={() => {
+                    toast({
+                      title: "QR Code",
+                      description: "QR code feature coming soon!",
+                    });
+                  }}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Generate QR code"
+                >
+                  <QrCode className="h-5 w-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Next Steps */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                Or explore more options:
+              </h3>
+              <div className="grid grid-cols-3 gap-4">
+                <Button
+                  variant="outline"
+                  className="h-auto py-6 flex-col items-center justify-center bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-300"
+                  onClick={() => {
+                    toast({
+                      title: "Embed Code",
+                      description: "Embed code feature coming soon!",
+                    });
+                  }}
+                >
+                  <Code className="h-6 w-6 mb-2 text-purple-600" />
+                  <span className="text-sm font-medium text-purple-900">
+                    Embed in Website
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-auto py-6 flex-col items-center justify-center bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300"
+                  onClick={() => {
+                    toast({
+                      title: "Integrations",
+                      description: "Integrations feature coming soon!",
+                    });
+                  }}
+                >
+                  <Settings className="h-6 w-6 mb-2 text-emerald-600" />
+                  <span className="text-sm font-medium text-emerald-900">
+                    Setup Integrations
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-auto py-6 flex-col items-center justify-center bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-300"
+                  onClick={() => {
+                    toast({
+                      title: "Customize Link",
+                      description: "Customize form link feature coming soon!",
+                    });
+                  }}
+                >
+                  <Link2 className="h-6 w-6 mb-2 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-900">
+                    Customize Link
+                  </span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

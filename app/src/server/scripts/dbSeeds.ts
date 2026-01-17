@@ -47,13 +47,12 @@ function generateMockUserData(): MockUserData {
     subscriptionStatus,
     lemonSqueezyCustomerPortalUrl: null,
     paymentProcessorUserId: hasUserPaidOnStripe
-      ? `cus_test_${faker.string.uuid()}`
+      ? faker.string.uuid()
       : null,
-    datePaid: hasUserPaidOnStripe
-      ? faker.date.between({ from: createdAt, to: timePaid })
-      : null,
+    datePaid: subscriptionStatus ? timePaid : null,
     subscriptionPlan: subscriptionStatus
       ? faker.helpers.arrayElement(getSubscriptionPaymentPlanIds())
       : null,
+    aiUsageCount: 0,
   };
 }

@@ -1,14 +1,17 @@
-import { HttpError } from "wasp/server";
+import { HttpError, prisma } from "wasp/server";
 import type { GenerateFormWithAI } from "wasp/server/operations";
 import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
+import { PaymentPlanId } from "../payment/plans";
 
 const generateFormWithAISchema = z.object({
   prompt: z.string().min(10).max(500),
   workspaceId: z.string().uuid(),
 });
+
+const FREE_TIER_AI_LIMIT = 2; // Free tier gets 2 AI requests
 
 export const generateFormWithAI: GenerateFormWithAI<
   z.infer<typeof generateFormWithAISchema>,
@@ -23,21 +26,50 @@ export const generateFormWithAI: GenerateFormWithAI<
     rawArgs,
   );
 
+  // Check if user is on PRO plan
+  const isPro = context.user.subscriptionPlan === PaymentPlanId.Pro;
+  
+  // For free tier, check usage limit
+  if (!isPro) {
+    const user = await prisma.user.findUnique({
+      where: { id: context.user.id },
+      select: { aiUsageCount: true },
+    });
+
+    if (!user) {
+      throw new HttpError(404, "User not found");
+    }
+
+    if (user.aiUsageCount >= FREE_TIER_AI_LIMIT) {
+      throw new HttpError(403, `AI features are disabled for free tier after ${FREE_TIER_AI_LIMIT} uses. Please upgrade to PRO for unlimited AI features.`);
+    }
+
+    // Increment usage count for free tier
+    await prisma.user.update({
+      where: { id: context.user.id },
+      data: { aiUsageCount: { increment: 1 } },
+    });
+  }
+
   try {
-    const formSchema = await callAIFormGenerator(prompt);
+    // For free tier, use minimal tokens
+    const formSchema = await callAIFormGenerator(prompt, !isPro);
     return formSchema;
   } catch (error: any) {
     throw new HttpError(500, `AI generation failed: ${error.message}`);
   }
 };
 
-async function callAIFormGenerator(prompt: string): Promise<FormSchema> {
+async function callAIFormGenerator(prompt: string, isFreeTier: boolean = false): Promise<FormSchema> {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     throw new HttpError(500, "OpenAI API key not configured");
   }
 
-  const systemPrompt = `You are a form builder assistant. Generate a JSON form schema based on user prompts.
+  // For free tier, use a much shorter system prompt to minimize tokens
+  const systemPrompt = isFreeTier
+    ? `Generate form JSON. Return: {"title":"...","description":"...","fields":[{"id":"...","type":"...","label":"..."}]}`
+    : `You are a form builder assistant. Generate a JSON form schema based on user prompts.
 
 Return ONLY valid JSON matching this structure:
 {
@@ -50,7 +82,7 @@ Return ONLY valid JSON matching this structure:
       "label": "Field Label",
       "placeholder": "Optional placeholder",
       "required": true/false,
-      "options": ["option1", "option2"] // only for select, multiselect, radio
+      "options": ["option1", "option2"]
     }
   ]
 }
@@ -80,10 +112,10 @@ Generate appropriate fields based on the user's request.`;
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
+          { role: "user", content: isFreeTier ? prompt.substring(0, 100) : prompt }, // Limit prompt length for free tier
         ],
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: isFreeTier ? 500 : 2000, // Much lower token limit for free tier
       }),
     });
 

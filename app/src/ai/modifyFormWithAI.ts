@@ -1,14 +1,17 @@
-import { HttpError } from "wasp/server";
+import { HttpError, prisma } from "wasp/server";
 import type { ModifyFormWithAI } from "wasp/server/operations";
 import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
+import { PaymentPlanId } from "../payment/plans";
 
 const modifyFormWithAISchema = z.object({
   currentSchema: z.any(), // The current form schema
   modificationPrompt: z.string().min(10).max(1000), // What the user wants to change
 });
+
+const FREE_TIER_AI_LIMIT = 2; // Free tier gets 2 AI requests
 
 export const modifyFormWithAI: ModifyFormWithAI<
   z.infer<typeof modifyFormWithAISchema>,
@@ -23,8 +26,38 @@ export const modifyFormWithAI: ModifyFormWithAI<
     rawArgs,
   );
 
+  // Check if user is on PRO plan
+  const isPro = context.user.subscriptionPlan === PaymentPlanId.Pro;
+  
+  // For free tier, check usage limit
+  if (!isPro) {
+    const user = await prisma.user.findUnique({
+      where: { id: context.user.id },
+      select: { aiUsageCount: true },
+    });
+
+    if (!user) {
+      throw new HttpError(404, "User not found");
+    }
+
+    if (user.aiUsageCount >= FREE_TIER_AI_LIMIT) {
+      throw new HttpError(403, `AI features are disabled for free tier after ${FREE_TIER_AI_LIMIT} uses. Please upgrade to PRO for unlimited AI features.`);
+    }
+
+    // Increment usage count for free tier
+    await prisma.user.update({
+      where: { id: context.user.id },
+      data: { aiUsageCount: { increment: 1 } },
+    });
+  }
+
   try {
-    const modifiedSchema = await callAIModifyForm(currentSchema, modificationPrompt);
+    // For free tier, use minimal tokens (simpler model and shorter prompts)
+    const modifiedSchema = await callAIModifyForm(
+      currentSchema, 
+      modificationPrompt,
+      !isPro // isFreeTier flag
+    );
     return modifiedSchema;
   } catch (error: any) {
     throw new HttpError(500, `AI modification failed: ${error.message}`);
@@ -34,13 +67,17 @@ export const modifyFormWithAI: ModifyFormWithAI<
 async function callAIModifyForm(
   currentSchema: FormSchema,
   modificationPrompt: string,
+  isFreeTier: boolean = false,
 ): Promise<FormSchema> {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     throw new HttpError(500, "OpenAI API key not configured");
   }
 
-  const systemPrompt = `You are a form builder assistant. Your task is to MODIFY an existing form schema based on user requests.
+  // For free tier, use a much shorter system prompt to minimize tokens
+  const systemPrompt = isFreeTier
+    ? `Modify this form schema. Return complete JSON. Preserve existing fields unless removed. Current: ${JSON.stringify(currentSchema)}. Return JSON:`
+    : `You are a form builder assistant. Your task is to MODIFY an existing form schema based on user requests.
 
 IMPORTANT RULES:
 1. You MUST return the COMPLETE modified form schema, not just the changes
@@ -64,7 +101,7 @@ Return ONLY valid JSON matching this structure:
       "label": "Field Label",
       "placeholder": "Optional placeholder",
       "required": true/false,
-      "options": ["option1", "option2"] // only for select, multiselect, radio
+      "options": ["option1", "option2"]
     }
   ]
 }
@@ -94,10 +131,10 @@ Modify the form according to the user's request and return the complete modified
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: modificationPrompt },
+          { role: "user", content: isFreeTier ? modificationPrompt.substring(0, 100) : modificationPrompt }, // Limit prompt length for free tier
         ],
         temperature: 0.3, // Lower temperature for more consistent modifications
-        max_tokens: 3000,
+        max_tokens: isFreeTier ? 500 : 3000, // Much lower token limit for free tier
       }),
     });
 
