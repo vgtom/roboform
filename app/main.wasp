@@ -285,6 +285,12 @@ page WorkspacesPage {
   component: import WorkspacesPage from "@src/workspaces/WorkspacesPage"
 }
 
+route OrganizationSettingsRoute { path: "/workspaces/organization/:organizationId/settings", to: OrganizationSettingsPage }
+page OrganizationSettingsPage {
+  authRequired: true,
+  component: import OrganizationSettingsPage from "@src/workspaces/OrganizationSettingsPage"
+}
+
 route WorkspaceRoute { path: "/workspaces/:workspaceId", to: WorkspaceDashboardPage }
 page WorkspaceDashboardPage {
   authRequired: true,
