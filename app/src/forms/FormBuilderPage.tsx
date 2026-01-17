@@ -4,6 +4,7 @@ import {
   getForm,
   updateForm,
   publishForm,
+  modifyFormWithAI,
 } from "wasp/client/operations";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../client/components/ui/button";
@@ -46,6 +47,11 @@ import {
   Image as ImageIcon,
   Star,
   MoreVertical,
+  Sparkles,
+  Loader2,
+  Workflow,
+  Palette,
+  Crown,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
 import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
@@ -66,8 +72,11 @@ export default function FormBuilderPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"build" | "integrate" | "share" | "results">("build");
+  const [buildSubTab, setBuildSubTab] = useState<"logic" | "design" | "preview" | "upgrade">("design");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewFormData, setPreviewFormData] = useState<Record<string, any>>({});
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const { data: form, isLoading, refetch: refetchForm } = useQuery(
     getForm,
@@ -218,33 +227,124 @@ export default function FormBuilderPage() {
     );
   }
 
+  const handleAIFormChange = async () => {
+    if (!aiPrompt.trim() || aiPrompt.trim().length < 10) {
+      toast({
+        title: "Error",
+        description: "Please enter a prompt with at least 10 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formId) {
+      toast({
+        title: "Error",
+        description: "Form ID not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      // Use modifyFormWithAI to modify the existing form based on the prompt
+      const modifiedSchema = await modifyFormWithAI({
+        currentSchema: schema,
+        modificationPrompt: aiPrompt.trim(),
+      });
+
+      // Update the form with the modified schema
+      setSchema(modifiedSchema as FormSchema);
+      
+      // Auto-save the changes to the database
+      await updateForm({
+        id: formId,
+        schemaJson: modifiedSchema,
+      });
+
+      setAiPrompt("");
+      toast({
+        title: "Form updated!",
+        description: "Your form has been modified with AI and saved successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to modify form with AI",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <Link to={`/workspaces/${workspaceId}`}>
+      {/* Top Bar with Tabs and Breadcrumbs */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="px-6 py-3 flex items-center justify-between">
+          {/* Left: Back Button + Form Name */}
+          <div className="flex items-center gap-2">
+            <Link to="/workspaces">
               <ArrowLeft className="h-5 w-5 text-gray-600 hover:text-gray-900" />
             </Link>
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link to="/workspaces">Workspaces</Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link to={`/workspaces/${workspaceId}`}>Workspace</Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>{form.name}</BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
+            <Link to="/workspaces" className="text-gray-900 hover:text-gray-700 font-medium">
+              {form.name}
+            </Link>
           </div>
+
+          {/* Center: Main Tabs */}
+          <div className="flex-1 flex justify-center">
+            <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab("build")}
+              className={cn(
+                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                activeTab === "build"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-600 hover:text-gray-900"
+              )}
+            >
+              Build
+            </button>
+            <button
+              onClick={() => setActiveTab("integrate")}
+              className={cn(
+                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                activeTab === "integrate"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-600 hover:text-gray-900"
+              )}
+            >
+              Integrate
+            </button>
+            <button
+              onClick={() => setActiveTab("share")}
+              className={cn(
+                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                activeTab === "share"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-600 hover:text-gray-900"
+              )}
+            >
+              Share
+            </button>
+            <button
+              onClick={() => setActiveTab("results")}
+              className={cn(
+                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                activeTab === "results"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-600 hover:text-gray-900"
+              )}
+            >
+              Results
+            </button>
+            </div>
+          </div>
+
+          {/* Right: Action Buttons */}
           <div className="flex items-center gap-3">
             <Button 
               variant="ghost" 
@@ -268,6 +368,7 @@ export default function FormBuilderPage() {
                 }}
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
+                Link
               </Button>
             )}
             <Button onClick={handlePublish} size="sm">
@@ -275,54 +376,6 @@ export default function FormBuilderPage() {
               {form.status === "PUBLISHED" ? "Unpublish" : "Publish"}
             </Button>
           </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 border-b border-gray-200 -mb-4">
-          <button
-            onClick={() => setActiveTab("build")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              activeTab === "build"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            )}
-          >
-            Build
-          </button>
-          <button
-            onClick={() => setActiveTab("integrate")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              activeTab === "integrate"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            )}
-          >
-            Integrate
-          </button>
-          <button
-            onClick={() => setActiveTab("share")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              activeTab === "share"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            )}
-          >
-            Share
-          </button>
-          <button
-            onClick={() => setActiveTab("results")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              activeTab === "results"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            )}
-          >
-            Results
-          </button>
         </div>
       </div>
 
@@ -364,12 +417,128 @@ export default function FormBuilderPage() {
           </div>
         </div>
 
-        {/* Center - Preview */}
-        <div className="flex-1 bg-gradient-to-br from-blue-500 to-blue-600 overflow-y-auto relative mb-4">
-          <div className="min-h-full flex items-center justify-center p-8">
-            <FormPreview schema={schema} selectedFieldId={selectedFieldId} />
+        {/* Center - Build Page Content */}
+        {activeTab === "build" ? (
+          <div className="flex-1 flex flex-col bg-white overflow-hidden">
+            {/* Build Sub-Tabs: Logic, Design, Preview, Upgrade */}
+            <div className="border-b border-gray-200 px-4 py-2 flex items-center gap-1">
+              <button
+                onClick={() => setBuildSubTab("logic")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5",
+                  buildSubTab === "logic"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                )}
+              >
+                <Workflow className="h-3.5 w-3.5" />
+                Logic
+              </button>
+              <button
+                onClick={() => setBuildSubTab("design")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5",
+                  buildSubTab === "design"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                )}
+              >
+                <Palette className="h-3.5 w-3.5" />
+                Design
+              </button>
+              <button
+                onClick={() => setBuildSubTab("preview")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5",
+                  buildSubTab === "preview"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                )}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Preview
+              </button>
+              <button
+                onClick={() => setBuildSubTab("upgrade")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5",
+                  buildSubTab === "upgrade"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                )}
+              >
+                <Crown className="h-3.5 w-3.5" />
+                Upgrade
+              </button>
+            </div>
+
+            {/* AI Prompt Box for Form Changes */}
+            <div className="border-b border-gray-200 p-4 bg-gray-50">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="Describe changes you want to make to this form... (e.g., 'Add a phone number field', 'Make the email field required')"
+                    className="min-h-[60px] resize-none text-sm"
+                    disabled={isGenerating}
+                  />
+                </div>
+                <Button
+                  onClick={handleAIFormChange}
+                  disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating}
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-4 h-[60px] whitespace-nowrap"
+                  size="sm"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Apply AI
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Selected Question/Block Display */}
+            <div className="flex-1 bg-gradient-to-br from-blue-500 to-blue-600 overflow-y-auto mb-4">
+              <div className="min-h-full flex items-center justify-center px-8 pt-8 pb-4">
+                {selectedField ? (
+                  <div className="w-full max-w-2xl text-center text-white">
+                    <h2 className="text-3xl font-bold mb-2">{selectedField.label || "Untitled Question"}</h2>
+                    {selectedField.placeholder && (
+                      <p className="text-blue-100 mb-8">{selectedField.placeholder}</p>
+                    )}
+                    <div className="mt-8">
+                      {renderPreviewField(selectedField)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full max-w-2xl text-center text-white">
+                    <h2 className="text-3xl font-bold mb-2">{schema.title || "Untitled Form"}</h2>
+                    {schema.description && (
+                      <p className="text-blue-100 mb-8">{schema.description}</p>
+                    )}
+                    <p className="text-blue-200">Select a question from the left sidebar to edit</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Other tabs content (Integrate, Share, Results) */
+          <div className="flex-1 bg-white flex items-center justify-center">
+            <div className="text-center text-gray-500">
+              <p className="text-lg font-semibold mb-2">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</p>
+              <p className="text-sm">This section is coming soon</p>
+            </div>
+          </div>
+        )}
 
           {/* Right Sidebar - Properties */}
         <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto">
