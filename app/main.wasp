@@ -297,7 +297,7 @@ page FormBuilderPage {
   component: import FormBuilderPage from "@src/forms/FormBuilderPage"
 }
 
-route PublicFormRoute { path: "/f/:slug", to: PublicFormPage }
+route PublicFormRoute { path: "/f/:formId", to: PublicFormPage }
 page PublicFormPage {
   component: import PublicFormPage from "@src/forms/PublicFormPage"
 }
@@ -357,8 +357,8 @@ query getForm {
   entities: [User, Form, Workspace, Organization, OrganizationMember]
 }
 
-query getFormBySlug {
-  fn: import { getFormBySlug } from "@src/forms/operations",
+query getPublicForm {
+  fn: import { getPublicForm } from "@src/forms/operations",
   entities: [Form]
 }
 

@@ -178,7 +178,7 @@ export default function WorkspaceDashboardPage() {
                       variant="outline"
                       size="icon"
                       onClick={() => {
-                        const url = `${window.location.origin}/f/${form.slug}`;
+                        const url = `${window.location.origin}/f/${form.id}`;
                         navigator.clipboard.writeText(url);
                         toast({
                           title: "Link copied",
