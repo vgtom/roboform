@@ -4,14 +4,15 @@ import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
-import { PaymentPlanId } from "../payment/plans";
+import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
 
 const modifyFormWithAISchema = z.object({
   currentSchema: z.any(), // The current form schema
   modificationPrompt: z.string().min(10).max(1000), // What the user wants to change
 });
 
-const FREE_TIER_AI_LIMIT = 2; // Free tier gets 2 AI requests
+// Estimate cost per AI request (rough estimate: ~$0.01 per request)
+const ESTIMATED_COST_PER_REQUEST = 0.01;
 
 export const modifyFormWithAI: ModifyFormWithAI<
   z.infer<typeof modifyFormWithAISchema>,
@@ -26,38 +27,43 @@ export const modifyFormWithAI: ModifyFormWithAI<
     rawArgs,
   );
 
-  // Check if user is on PRO plan
-  const isPro = context.user.subscriptionPlan === PaymentPlanId.Pro;
+  const userPlan = (context.user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  const aiLimit = AI_USAGE_LIMITS[userPlan];
   
-  // For free tier, check usage limit
-  if (!isPro) {
-    const user = await prisma.user.findUnique({
-      where: { id: context.user.id },
-      select: { aiUsageCount: true },
-    });
+  // Check if AI features are enabled for this plan
+  if (!aiLimit.enabled) {
+    throw new HttpError(403, "AI features are not available on the Free plan. Please upgrade to Starter or Pro to use AI features.");
+  }
+  
+  // Check AI usage cost limit
+  const user = await prisma.user.findUnique({
+    where: { id: context.user.id },
+    select: { aiUsageCost: true },
+  });
 
-    if (!user) {
-      throw new HttpError(404, "User not found");
-    }
+  if (!user) {
+    throw new HttpError(404, "User not found");
+  }
 
-    if (user.aiUsageCount >= FREE_TIER_AI_LIMIT) {
-      throw new HttpError(403, `AI features are disabled for free tier after ${FREE_TIER_AI_LIMIT} uses. Please upgrade to PRO for unlimited AI features.`);
-    }
-
-    // Increment usage count for free tier
-    await prisma.user.update({
-      where: { id: context.user.id },
-      data: { aiUsageCount: { increment: 1 } },
-    });
+  const estimatedCost = ESTIMATED_COST_PER_REQUEST;
+  if (user.aiUsageCost + estimatedCost > aiLimit.costLimit) {
+    const remaining = aiLimit.costLimit - user.aiUsageCost;
+    throw new HttpError(403, `AI usage limit reached. You have $${remaining.toFixed(2)} remaining (limit: $${aiLimit.costLimit.toFixed(2)}). Please upgrade to Pro for higher limits.`);
   }
 
   try {
-    // For free tier, use minimal tokens (simpler model and shorter prompts)
     const modifiedSchema = await callAIModifyForm(
       currentSchema, 
       modificationPrompt,
-      !isPro // isFreeTier flag
+      userPlan === PaymentPlanId.Starter // Use minimal tokens for Starter
     );
+    
+    // Update AI usage cost after successful request
+    await prisma.user.update({
+      where: { id: context.user.id },
+      data: { aiUsageCost: { increment: estimatedCost } },
+    });
+    
     return modifiedSchema;
   } catch (error: any) {
     throw new HttpError(500, `AI modification failed: ${error.message}`);
@@ -67,15 +73,15 @@ export const modifyFormWithAI: ModifyFormWithAI<
 async function callAIModifyForm(
   currentSchema: FormSchema,
   modificationPrompt: string,
-  isFreeTier: boolean = false,
+  useMinimalTokens: boolean = false,
 ): Promise<FormSchema> {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     throw new HttpError(500, "OpenAI API key not configured");
   }
 
-  // For free tier, use a much shorter system prompt to minimize tokens
-  const systemPrompt = isFreeTier
+  // For Starter plan, use a shorter system prompt to minimize tokens
+  const systemPrompt = useMinimalTokens
     ? `Modify this form schema. Return complete JSON. Preserve existing fields unless removed. Current: ${JSON.stringify(currentSchema)}. Return JSON:`
     : `You are a form builder assistant. Your task is to MODIFY an existing form schema based on user requests.
 
@@ -131,10 +137,10 @@ Modify the form according to the user's request and return the complete modified
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: isFreeTier ? modificationPrompt.substring(0, 100) : modificationPrompt }, // Limit prompt length for free tier
+          { role: "user", content: useMinimalTokens ? modificationPrompt.substring(0, 100) : modificationPrompt }, // Limit prompt length for Starter
         ],
         temperature: 0.3, // Lower temperature for more consistent modifications
-        max_tokens: isFreeTier ? 500 : 3000, // Much lower token limit for free tier
+        max_tokens: useMinimalTokens ? 500 : 3000, // Lower token limit for Starter plan
       }),
     });
 

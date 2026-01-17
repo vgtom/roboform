@@ -17,7 +17,6 @@ import { useIsLandingPage } from "../../hooks/useIsLandingPage";
 import logo from "../../static/logo.webp";
 import { cn } from "../../utils";
 import DarkModeSwitcher from "../DarkModeSwitcher";
-import { Announcement } from "./Announcement";
 
 export interface NavigationItem {
   name: string;
@@ -46,7 +45,6 @@ export default function NavBar({
 
   return (
     <>
-      {isLandingPage && <Announcement />}
       <header
         className={cn(
           "sticky top-0 z-50 transition-all duration-300",

@@ -1,7 +1,8 @@
 import { ChevronDown, LogOut, User } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { logout } from "wasp/client/auth";
-import { Link as WaspRouterLink } from "wasp/client/router";
+import { Link as WaspRouterLink, routes } from "wasp/client/router";
 import { type User as UserEntity } from "wasp/entities";
 import {
   DropdownMenu,
@@ -13,6 +14,12 @@ import { userMenuItems } from "./constants";
 
 export function UserDropdown({ user }: { user: Partial<UserEntity> }) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate(routes.LoginRoute.to);
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -48,7 +55,7 @@ export function UserDropdown({ user }: { user: Partial<UserEntity> }) {
         <DropdownMenuItem>
           <button
             type="button"
-            onClick={() => logout()}
+            onClick={handleLogout}
             className="flex w-full items-center gap-3"
           >
             <LogOut size="1.1rem" />

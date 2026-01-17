@@ -4,14 +4,15 @@ import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
-import { PaymentPlanId } from "../payment/plans";
+import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
 
 const generateFormWithAISchema = z.object({
   prompt: z.string().min(10).max(500),
   workspaceId: z.string().uuid(),
 });
 
-const FREE_TIER_AI_LIMIT = 2; // Free tier gets 2 AI requests
+// Estimate cost per AI request (rough estimate: ~$0.01 per request)
+const ESTIMATED_COST_PER_REQUEST = 0.01;
 
 export const generateFormWithAI: GenerateFormWithAI<
   z.infer<typeof generateFormWithAISchema>,
@@ -26,48 +27,53 @@ export const generateFormWithAI: GenerateFormWithAI<
     rawArgs,
   );
 
-  // Check if user is on PRO plan
-  const isPro = context.user.subscriptionPlan === PaymentPlanId.Pro;
+  const userPlan = (context.user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  const aiLimit = AI_USAGE_LIMITS[userPlan];
   
-  // For free tier, check usage limit
-  if (!isPro) {
-    const user = await prisma.user.findUnique({
-      where: { id: context.user.id },
-      select: { aiUsageCount: true },
-    });
+  // Check if AI features are enabled for this plan
+  if (!aiLimit.enabled) {
+    throw new HttpError(403, "AI features are not available on the Free plan. Please upgrade to Starter or Pro to use AI features.");
+  }
+  
+  // Check AI usage cost limit
+  const user = await prisma.user.findUnique({
+    where: { id: context.user.id },
+    select: { aiUsageCost: true },
+  });
 
-    if (!user) {
-      throw new HttpError(404, "User not found");
-    }
+  if (!user) {
+    throw new HttpError(404, "User not found");
+  }
 
-    if (user.aiUsageCount >= FREE_TIER_AI_LIMIT) {
-      throw new HttpError(403, `AI features are disabled for free tier after ${FREE_TIER_AI_LIMIT} uses. Please upgrade to PRO for unlimited AI features.`);
-    }
-
-    // Increment usage count for free tier
-    await prisma.user.update({
-      where: { id: context.user.id },
-      data: { aiUsageCount: { increment: 1 } },
-    });
+  const estimatedCost = ESTIMATED_COST_PER_REQUEST;
+  if (user.aiUsageCost + estimatedCost > aiLimit.costLimit) {
+    const remaining = aiLimit.costLimit - user.aiUsageCost;
+    throw new HttpError(403, `AI usage limit reached. You have $${remaining.toFixed(2)} remaining (limit: $${aiLimit.costLimit.toFixed(2)}). Please upgrade to Pro for higher limits.`);
   }
 
   try {
-    // For free tier, use minimal tokens
-    const formSchema = await callAIFormGenerator(prompt, !isPro);
+    const formSchema = await callAIFormGenerator(prompt, userPlan === PaymentPlanId.Starter);
+    
+    // Update AI usage cost after successful request
+    await prisma.user.update({
+      where: { id: context.user.id },
+      data: { aiUsageCost: { increment: estimatedCost } },
+    });
+    
     return formSchema;
   } catch (error: any) {
     throw new HttpError(500, `AI generation failed: ${error.message}`);
   }
 };
 
-async function callAIFormGenerator(prompt: string, isFreeTier: boolean = false): Promise<FormSchema> {
+async function callAIFormGenerator(prompt: string, useMinimalTokens: boolean = false): Promise<FormSchema> {
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     throw new HttpError(500, "OpenAI API key not configured");
   }
 
-  // For free tier, use a much shorter system prompt to minimize tokens
-  const systemPrompt = isFreeTier
+  // For Starter plan, use a shorter system prompt to minimize tokens
+  const systemPrompt = useMinimalTokens
     ? `Generate form JSON. Return: {"title":"...","description":"...","fields":[{"id":"...","type":"...","label":"..."}]}`
     : `You are a form builder assistant. Generate a JSON form schema based on user prompts.
 
@@ -112,10 +118,10 @@ Generate appropriate fields based on the user's request.`;
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: isFreeTier ? prompt.substring(0, 100) : prompt }, // Limit prompt length for free tier
+          { role: "user", content: useMinimalTokens ? prompt.substring(0, 100) : prompt }, // Limit prompt length for Starter
         ],
         temperature: 0.7,
-        max_tokens: isFreeTier ? 500 : 2000, // Much lower token limit for free tier
+        max_tokens: useMinimalTokens ? 500 : 2000, // Lower token limit for Starter plan
       }),
     });
 

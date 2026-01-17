@@ -67,7 +67,7 @@ import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared
 import { generateId } from "../shared/utils";
 import { cn } from "../client/utils";
 import { useAuth } from "wasp/client/auth";
-import { PaymentPlanId } from "../payment/plans";
+import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
 import {
   Dialog,
   DialogContent,
@@ -98,10 +98,10 @@ export default function FormBuilderPage() {
 
   const [schema, setSchema] = useState<FormSchema>(DEFAULT_FORM_SCHEMA);
   
-  const isPro = user?.subscriptionPlan === PaymentPlanId.Pro;
-  const aiUsageCount = user?.aiUsageCount || 0;
-  const FREE_TIER_AI_LIMIT = 2;
-  const isAIDisabled = !isPro && aiUsageCount >= FREE_TIER_AI_LIMIT;
+  const userPlan = (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  const aiLimit = AI_USAGE_LIMITS[userPlan];
+  const aiUsageCost = user?.aiUsageCost || 0;
+  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCost >= aiLimit.costLimit);
 
   useEffect(() => {
     if (form?.schemaJson) {
@@ -257,11 +257,20 @@ export default function FormBuilderPage() {
 
   const handleAIFormChange = async () => {
     if (isAIDisabled) {
-      toast({
-        title: "AI Features Disabled",
-        description: `You've reached the free tier limit of ${FREE_TIER_AI_LIMIT} AI requests. Upgrade to PRO for unlimited AI features.`,
-        variant: "destructive",
-      });
+      if (!aiLimit.enabled) {
+        toast({
+          title: "AI Features Not Available",
+          description: "AI features are not available on the Free plan. Please upgrade to Starter or Pro to use AI features.",
+          variant: "destructive",
+        });
+      } else {
+        const remaining = aiLimit.costLimit - aiUsageCost;
+        toast({
+          title: "AI Usage Limit Reached",
+          description: `You've reached your AI usage limit ($${aiLimit.costLimit.toFixed(2)}). You have $${remaining.toFixed(2)} remaining. Please upgrade to Pro for higher limits.`,
+          variant: "destructive",
+        });
+      }
       return;
     }
 
@@ -301,10 +310,10 @@ export default function FormBuilderPage() {
       });
 
       setAiPrompt("");
-      const remainingUses = isPro ? "unlimited" : `${FREE_TIER_AI_LIMIT - (aiUsageCount + 1)} remaining`;
+      const remaining = aiLimit.costLimit - aiUsageCost - 0.01; // Estimate ~$0.01 per request
       toast({
         title: "Form updated!",
-        description: `Your form has been modified with AI and saved successfully. ${!isPro ? `(${remainingUses} free uses)` : ""}`,
+        description: `Your form has been modified with AI and saved successfully. ${remaining > 0 ? `($${remaining.toFixed(2)} remaining)` : ""}`,
       });
     } catch (error: any) {
       if (error.message?.includes("AI features are disabled")) {
@@ -526,14 +535,19 @@ export default function FormBuilderPage() {
                     <div className="flex items-center gap-2">
                       <Crown className="h-5 w-5 text-yellow-600" />
                       <div>
-                        <p className="font-semibold text-yellow-900">AI Features Disabled</p>
+                        <p className="font-semibold text-yellow-900">
+                          {!aiLimit.enabled ? "AI Features Not Available" : "AI Usage Limit Reached"}
+                        </p>
                         <p className="text-sm text-yellow-700">
-                          You've reached the free tier limit. Upgrade to PRO for unlimited AI features.
+                          {!aiLimit.enabled 
+                            ? "AI features are not available on the Free plan. Upgrade to Starter or Pro to use AI features."
+                            : `You've reached your AI usage limit ($${aiLimit.costLimit.toFixed(2)}). Upgrade to Pro for higher limits.`
+                          }
                         </p>
                       </div>
                     </div>
                     <Button asChild variant="default" size="sm">
-                      <Link to="/pricing">Upgrade to PRO</Link>
+                      <Link to="/pricing">Upgrade Plan</Link>
                     </Button>
                   </div>
                 </div>
@@ -548,9 +562,9 @@ export default function FormBuilderPage() {
                         className="min-h-[60px] resize-none text-sm"
                         disabled={isGenerating || isAIDisabled}
                       />
-                      {!isPro && (
+                      {aiLimit.enabled && (
                         <p className="text-xs text-gray-500 mt-1">
-                          {FREE_TIER_AI_LIMIT - aiUsageCount} free AI uses remaining
+                          ${(aiLimit.costLimit - aiUsageCost).toFixed(2)} AI usage remaining (${aiLimit.costLimit.toFixed(2)} limit)
                         </p>
                       )}
                     </div>

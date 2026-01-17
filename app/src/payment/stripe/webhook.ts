@@ -108,18 +108,8 @@ async function handleInvoicePaid(
   );
 
   switch (paymentPlanId) {
-    case PaymentPlanId.Credits10:
-      await updateUserCredits(
-        {
-          paymentProcessorUserId: customerId,
-          datePaid: invoicePaidAtDate,
-          numOfCreditsPurchased: paymentPlans[paymentPlanId].effect.amount,
-        },
-        prismaUserDelegate,
-      );
-      break;
+    case PaymentPlanId.Starter:
     case PaymentPlanId.Pro:
-    case PaymentPlanId.Hobby:
       await updateUserSubscription(
         {
           paymentProcessorUserId: customerId,
@@ -129,6 +119,9 @@ async function handleInvoicePaid(
         },
         prismaUserDelegate,
       );
+      break;
+    case PaymentPlanId.Free:
+      // Free plan doesn't use payment processor
       break;
     default:
       assertUnreachable(paymentPlanId);

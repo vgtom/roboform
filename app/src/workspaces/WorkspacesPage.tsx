@@ -58,7 +58,7 @@ import {
   Crown,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
-import { PaymentPlanId } from "../payment/plans";
+import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
 import { OrganizationRole } from "@prisma/client";
 import { createForm, generateFormWithAI } from "wasp/client/operations";
 import { FORM_TEMPLATES } from "../templates/templates";
@@ -114,10 +114,10 @@ export default function WorkspacesPage() {
 
   const selectedOrg = organizations?.find((org) => org.id === selectedOrgId);
   const selectedWorkspace = workspaces?.find((w) => w.id === selectedWorkspaceId);
-  const isPro = user?.subscriptionPlan === PaymentPlanId.Pro;
-  const aiUsageCount = user?.aiUsageCount || 0;
-  const FREE_TIER_AI_LIMIT = 2;
-  const isAIDisabled = !isPro && aiUsageCount >= FREE_TIER_AI_LIMIT;
+  const userPlan = (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  const aiLimit = AI_USAGE_LIMITS[userPlan];
+  const aiUsageCost = user?.aiUsageCost || 0;
+  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCost >= aiLimit.costLimit);
 
   // Filter forms by selected workspace if one is selected
   const displayedForms = useMemo(() => {
@@ -291,14 +291,19 @@ export default function WorkspacesPage() {
                       <div className="flex items-center gap-2">
                         <Crown className="h-5 w-5 text-yellow-600" />
                         <div>
-                          <p className="font-semibold text-yellow-900">AI Features Disabled</p>
+                          <p className="font-semibold text-yellow-900">
+                            {!aiLimit.enabled ? "AI Features Not Available" : "AI Usage Limit Reached"}
+                          </p>
                           <p className="text-sm text-yellow-700">
-                            You've reached the free tier limit. Upgrade to PRO for unlimited AI features.
+                            {!aiLimit.enabled 
+                              ? "AI features are not available on the Free plan. Upgrade to Starter or Pro to use AI features."
+                              : `You've reached your AI usage limit ($${aiLimit.costLimit.toFixed(2)}). Upgrade to Pro for higher limits.`
+                            }
                           </p>
                         </div>
                       </div>
                       <Button asChild variant="default" size="sm">
-                        <Link to="/pricing">Upgrade to PRO</Link>
+                        <Link to="/pricing">Upgrade Plan</Link>
                       </Button>
                     </div>
                   </div>
@@ -313,9 +318,9 @@ export default function WorkspacesPage() {
                           className="min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400"
                           disabled={isGenerating || isAIDisabled}
                         />
-                        {!isPro && (
+                        {aiLimit.enabled && (
                           <p className="text-xs text-gray-500 mt-1">
-                            {FREE_TIER_AI_LIMIT - aiUsageCount} free AI uses remaining
+                            ${(aiLimit.costLimit - aiUsageCost).toFixed(2)} AI usage remaining (${aiLimit.costLimit.toFixed(2)} limit)
                           </p>
                         )}
                       </div>
@@ -619,7 +624,7 @@ export default function WorkspacesPage() {
       )}
 
       {/* Organization Settings Dialog - Now accessible via navbar */}
-      {isPro && selectedOrg && (
+      {userPlan !== PaymentPlanId.Free && selectedOrg && (
         <OrganizationSettingsDialog
           organization={selectedOrg}
           open={isOrgSettingsOpen}
@@ -628,7 +633,7 @@ export default function WorkspacesPage() {
       )}
 
       {/* Invite Member Dialog */}
-      {isPro && selectedOrg && (
+      {userPlan !== PaymentPlanId.Free && selectedOrg && (
         <InviteMemberDialog
           organizationId={selectedOrg.id}
           open={isInviteDialogOpen}
