@@ -18,7 +18,9 @@ export default function App() {
   const location = useLocation();
   const isMarketingPage = useMemo(() => {
     return (
-      location.pathname === "/" || location.pathname.startsWith("/pricing")
+      location.pathname === "/" || 
+      location.pathname.startsWith("/pricing") ||
+      location.pathname.startsWith("/coming-soon")
     );
   }, [location]);
 
