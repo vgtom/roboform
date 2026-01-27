@@ -53,11 +53,11 @@ export function prettyPaymentPlanName(planId: PaymentPlanId): string {
   return planToName[planId];
 }
 
-// AI usage limits for each plan
+// AI usage limits for each plan (based on request count)
 export const AI_USAGE_LIMITS = {
-  [PaymentPlanId.Free]: { enabled: false, costLimit: 0 }, // No AI features
-  [PaymentPlanId.Starter]: { enabled: true, costLimit: 1.0 }, // Limited AI for testing (~$1 OpenAI usage)
-  [PaymentPlanId.Pro]: { enabled: true, costLimit: 5.0 }, // Up to $4-5 OpenAI usage
+  [PaymentPlanId.Free]: { enabled: false, requestLimit: 0 }, // No AI features
+  [PaymentPlanId.Starter]: { enabled: true, requestLimit: 150 }, // 150 AI prompt requests/modifications
+  [PaymentPlanId.Pro]: { enabled: true, requestLimit: 2500 }, // 2500 AI prompt requests/modifications
 } as const;
 
 // Credits limits for free plan

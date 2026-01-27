@@ -53,6 +53,6 @@ function generateMockUserData(): MockUserData {
     subscriptionPlan: subscriptionStatus
       ? faker.helpers.arrayElement(getSubscriptionPaymentPlanIds())
       : null,
-    aiUsageCost: 0.0,
+    aiUsageCount: 0,
   };
 }

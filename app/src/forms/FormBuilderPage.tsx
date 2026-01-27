@@ -100,8 +100,8 @@ export default function FormBuilderPage() {
   
   const userPlan = (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
   const aiLimit = AI_USAGE_LIMITS[userPlan];
-  const aiUsageCost = user?.aiUsageCost || 0;
-  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCost >= aiLimit.costLimit);
+  const aiUsageCount = user?.aiUsageCount || 0;
+  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCount >= aiLimit.requestLimit);
 
   useEffect(() => {
     if (form?.schemaJson) {
@@ -264,10 +264,10 @@ export default function FormBuilderPage() {
           variant: "destructive",
         });
       } else {
-        const remaining = aiLimit.costLimit - aiUsageCost;
+        const remaining = aiLimit.requestLimit - aiUsageCount;
         toast({
           title: "AI Usage Limit Reached",
-          description: `You've reached your AI usage limit ($${aiLimit.costLimit.toFixed(2)}). You have $${remaining.toFixed(2)} remaining. Please upgrade to Pro for higher limits.`,
+          description: `You've reached your AI usage limit (${aiLimit.requestLimit} requests). You have ${remaining} requests remaining. Please upgrade to Pro for more requests.`,
           variant: "destructive",
         });
       }
@@ -310,10 +310,11 @@ export default function FormBuilderPage() {
       });
 
       setAiPrompt("");
-      const remaining = aiLimit.costLimit - aiUsageCost - 0.01; // Estimate ~$0.01 per request
+      // Note: User count will be updated on next page refresh/refetch
+      const remaining = Math.max(0, aiLimit.requestLimit - aiUsageCount - 2); // 2 requests: evaluation + generation
       toast({
         title: "Form updated!",
-        description: `Your form has been modified with AI and saved successfully. ${remaining > 0 ? `($${remaining.toFixed(2)} remaining)` : ""}`,
+        description: `Your form has been modified with AI and saved successfully. ${remaining > 0 ? `(${remaining} requests remaining)` : ""}`,
       });
     } catch (error: any) {
       if (error.message?.includes("AI features are disabled")) {
@@ -541,7 +542,7 @@ export default function FormBuilderPage() {
                         <p className="text-sm text-yellow-700">
                           {!aiLimit.enabled 
                             ? "AI features are not available on the Free plan. Upgrade to Starter or Pro to use AI features."
-                            : `You've reached your AI usage limit ($${aiLimit.costLimit.toFixed(2)}). Upgrade to Pro for higher limits.`
+                            : `You've reached your AI usage limit (${aiLimit.requestLimit} requests). Upgrade to Pro for more requests.`
                           }
                         </p>
                       </div>
@@ -557,20 +558,33 @@ export default function FormBuilderPage() {
                     <div className="flex-1">
                       <Textarea
                         value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 400) {
+                            setAiPrompt(e.target.value);
+                          }
+                        }}
                         placeholder="Describe changes you want to make to this form... (e.g., 'Add a phone number field', 'Make the email field required')"
                         className="min-h-[60px] resize-none text-sm"
                         disabled={isGenerating || isAIDisabled}
+                        maxLength={400}
                       />
-                      {aiLimit.enabled && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          ${(aiLimit.costLimit - aiUsageCost).toFixed(2)} AI usage remaining (${aiLimit.costLimit.toFixed(2)} limit)
+                      <div className="flex items-center justify-between mt-1">
+                        {aiLimit.enabled && (
+                          <p className="text-xs text-gray-500">
+                            {aiLimit.requestLimit - aiUsageCount} AI requests remaining ({aiLimit.requestLimit} request limit)
+                          </p>
+                        )}
+                        <p className={cn(
+                          "text-xs ml-auto",
+                          (400 - aiPrompt.length) < 50 ? "text-orange-600 font-medium" : "text-gray-500"
+                        )}>
+                          {400 - aiPrompt.length} characters remaining (400 character limit)
                         </p>
-                      )}
+                      </div>
                     </div>
                     <Button
                       onClick={handleAIFormChange}
-                      disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating || isAIDisabled}
+                      disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || aiPrompt.length > 400 || isGenerating || isAIDisabled}
                       className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-4 h-[60px] whitespace-nowrap"
                       size="sm"
                     >

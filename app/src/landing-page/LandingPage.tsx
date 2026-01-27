@@ -23,7 +23,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="bg-background text-foreground">
+    <div className="bg-[#f0f8ff]/30 text-foreground" style={{ backgroundColor: 'rgba(240, 248, 255, 0.3)' }}>
       <main className="isolate">
         <Hero />
         <ExamplesCarousel examples={examples} />

@@ -66,6 +66,7 @@ import { deleteForm } from "wasp/client/operations";
 import { Textarea } from "../client/components/ui/textarea";
 import { WorkspaceNavBar } from "./WorkspaceNavBar";
 import { getRandomColorForId } from "../shared/utils";
+import { cn } from "../client/utils";
 
 export default function WorkspacesPage() {
   const { data: user } = useAuth();
@@ -116,8 +117,8 @@ export default function WorkspacesPage() {
   const selectedWorkspace = workspaces?.find((w) => w.id === selectedWorkspaceId);
   const userPlan = (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
   const aiLimit = AI_USAGE_LIMITS[userPlan];
-  const aiUsageCost = user?.aiUsageCost || 0;
-  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCost >= aiLimit.costLimit);
+  const aiUsageCount = user?.aiUsageCount || 0;
+  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCount >= aiLimit.requestLimit);
 
   // Filter forms by selected workspace if one is selected
   const displayedForms = useMemo(() => {
@@ -297,7 +298,7 @@ export default function WorkspacesPage() {
                           <p className="text-sm text-yellow-700">
                             {!aiLimit.enabled 
                               ? "AI features are not available on the Free plan. Upgrade to Starter or Pro to use AI features."
-                              : `You've reached your AI usage limit ($${aiLimit.costLimit.toFixed(2)}). Upgrade to Pro for higher limits.`
+                              : `You've reached your AI usage limit (${aiLimit.requestLimit} requests). Upgrade to Pro for more requests.`
                             }
                           </p>
                         </div>
@@ -313,20 +314,33 @@ export default function WorkspacesPage() {
                       <div className="flex-1">
                         <Textarea
                           value={aiPrompt}
-                          onChange={(e) => setAiPrompt(e.target.value)}
+                          onChange={(e) => {
+                            if (e.target.value.length <= 400) {
+                              setAiPrompt(e.target.value);
+                            }
+                          }}
                           placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
                           className="min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400"
                           disabled={isGenerating || isAIDisabled}
+                          maxLength={400}
                         />
-                        {aiLimit.enabled && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            ${(aiLimit.costLimit - aiUsageCost).toFixed(2)} AI usage remaining (${aiLimit.costLimit.toFixed(2)} limit)
+                        <div className="flex items-center justify-between mt-1">
+                          {aiLimit.enabled && (
+                            <p className="text-xs text-gray-500">
+                              {aiLimit.requestLimit - aiUsageCount} AI requests remaining ({aiLimit.requestLimit} request limit)
+                            </p>
+                          )}
+                          <p className={cn(
+                            "text-xs ml-auto",
+                            (400 - aiPrompt.length) < 50 ? "text-orange-600 font-medium" : "text-gray-500"
+                          )}>
+                            {400 - aiPrompt.length} characters remaining (400 character limit)
                           </p>
-                        )}
+                        </div>
                       </div>
                       <Button
                         onClick={handleGenerateWithAI}
-                        disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating || !selectedWorkspaceId || isAIDisabled}
+                        disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || aiPrompt.length > 400 || isGenerating || !selectedWorkspaceId || isAIDisabled}
                         className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-6 h-[80px] whitespace-nowrap"
                         size="lg"
                       >
@@ -344,7 +358,7 @@ export default function WorkspacesPage() {
                       </Button>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      Minimum 10 characters required. AI will create your form structure automatically.
+                      Minimum 10 characters, maximum 400 characters required. AI will create your form structure automatically.
                     </p>
                   </>
                 )}
@@ -472,19 +486,32 @@ export default function WorkspacesPage() {
                     <Label>Describe your form</Label>
                     <Textarea
                       value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value.length <= 400) {
+                          setAiPrompt(e.target.value);
+                        }
+                      }}
                       placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
                       className="mt-1 min-h-[120px]"
                       disabled={isGenerating}
+                      maxLength={400}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Describe what kind of form you want to create. AI will generate the form structure for you.
-                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">
+                        Describe what kind of form you want to create. AI will generate the form structure for you.
+                      </p>
+                      <p className={cn(
+                        "text-xs ml-auto",
+                        (400 - aiPrompt.length) < 50 ? "text-orange-600 font-medium" : "text-gray-500"
+                      )}>
+                        {400 - aiPrompt.length} characters remaining (400 character limit)
+                      </p>
+                    </div>
                   </div>
                   <Button
                     onClick={handleGenerateWithAI}
                     className="w-full"
-                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || isGenerating}
+                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || aiPrompt.length > 400 || isGenerating}
                   >
                     {isGenerating ? (
                       <>

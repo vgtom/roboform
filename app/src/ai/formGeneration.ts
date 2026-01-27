@@ -5,14 +5,12 @@ import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
 import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
+import { evaluatePromptIsFormRelated } from "./promptEvaluation";
 
 const generateFormWithAISchema = z.object({
-  prompt: z.string().min(10).max(500),
+  prompt: z.string().min(10).max(400), // 400 character limit
   workspaceId: z.string().uuid(),
 });
-
-// Estimate cost per AI request (rough estimate: ~$0.01 per request)
-const ESTIMATED_COST_PER_REQUEST = 0.01;
 
 export const generateFormWithAI: GenerateFormWithAI<
   z.infer<typeof generateFormWithAISchema>,
@@ -35,29 +33,43 @@ export const generateFormWithAI: GenerateFormWithAI<
     throw new HttpError(403, "AI features are not available on the Free plan. Please upgrade to Starter or Pro to use AI features.");
   }
   
-  // Check AI usage cost limit
+  // Check AI usage count limit
   const user = await prisma.user.findUnique({
     where: { id: context.user.id },
-    select: { aiUsageCost: true },
+    select: { aiUsageCount: true },
   });
 
   if (!user) {
     throw new HttpError(404, "User not found");
   }
 
-  const estimatedCost = ESTIMATED_COST_PER_REQUEST;
-  if (user.aiUsageCost + estimatedCost > aiLimit.costLimit) {
-    const remaining = aiLimit.costLimit - user.aiUsageCost;
-    throw new HttpError(403, `AI usage limit reached. You have $${remaining.toFixed(2)} remaining (limit: $${aiLimit.costLimit.toFixed(2)}). Please upgrade to Pro for higher limits.`);
+  // Check if user has reached their request limit
+  if (user.aiUsageCount >= aiLimit.requestLimit) {
+    const remaining = aiLimit.requestLimit - user.aiUsageCount;
+    throw new HttpError(403, `AI usage limit reached. You have used all ${aiLimit.requestLimit} requests. Please upgrade to Pro for more requests.`);
+  }
+
+  // Evaluate the prompt first
+  const isFormRelated = await evaluatePromptIsFormRelated(prompt);
+  
+  // Increment usage count for evaluation (1 request)
+  await prisma.user.update({
+    where: { id: context.user.id },
+    data: { aiUsageCount: { increment: 1 } },
+  });
+
+  // If evaluation fails, throw error (1 usage already deducted)
+  if (!isFormRelated) {
+    throw new HttpError(400, "Your prompt is not related to form building. Please provide a prompt about creating forms. 1 request has been deducted.");
   }
 
   try {
     const formSchema = await callAIFormGenerator(prompt, userPlan === PaymentPlanId.Starter);
     
-    // Update AI usage cost after successful request
+    // Increment usage count for successful generation (1 more request)
     await prisma.user.update({
       where: { id: context.user.id },
-      data: { aiUsageCost: { increment: estimatedCost } },
+      data: { aiUsageCount: { increment: 1 } },
     });
     
     return formSchema;

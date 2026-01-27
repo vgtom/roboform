@@ -67,9 +67,11 @@ export default function App() {
     }
   }, [location]);
 
+  const isLandingPageRoute = location.pathname === "/";
+  
   return (
     <>
-      <div className="bg-background text-foreground min-h-screen">
+      <div className={isLandingPageRoute ? "bg-[#f0f8ff]/30 text-foreground min-h-screen" : "bg-background text-foreground min-h-screen"} style={isLandingPageRoute ? { backgroundColor: 'rgba(240, 248, 255, 0.3)' } : undefined}>
         {isAdminDashboard ? (
           <Outlet />
         ) : isFormBuilder ? (

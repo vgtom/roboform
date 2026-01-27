@@ -21,7 +21,7 @@ model User {
   subscriptionPlan          String?         // 'free', 'starter', 'pro'
   datePaid                  DateTime?
   credits                   Int             @default(5) // Free plan gets 5 credits
-  aiUsageCost               Float           @default(0.0) // Track AI usage cost in USD
+  aiUsageCount               Int             @default(0) // Track AI request count (prompts/modifications)
 
   gptResponses              GptResponse[]
   contactFormMessages       ContactFormMessage[]
