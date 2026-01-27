@@ -9,12 +9,12 @@ export default function Hero() {
       <BottomGradient />
       <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
         <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/50 px-4 py-2 text-sm backdrop-blur-sm">
-            <Sparkles className="h-4 w-4 text-blue-600" />
+          <div className="mb-8 inline-flex items-center gap-6 rounded-full border border-gray-200 bg-white/50 px-12 py-6 text-xl font-medium backdrop-blur-sm">
+            <Sparkles className="h-10 w-10 text-blue-600" />
             <span className="text-gray-700">AI-Powered Form Builder</span>
           </div>
           <h1 className="text-foreground text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-            Create beautiful forms{" "}
+            Create beautiful AI forms{" "}
             <span className="text-gradient-primary">in seconds</span>
           </h1>
           <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg leading-8 sm:text-xl">

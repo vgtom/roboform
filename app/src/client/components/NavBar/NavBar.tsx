@@ -113,7 +113,7 @@ export default function NavBar({
                 </div>
               </WaspRouterLink>
 
-              <ul className="ml-4 hidden items-center gap-6 lg:flex">
+              <ul className="ml-16 hidden items-center gap-6 lg:flex" style={{ marginLeft: '8rem' }}>
                 {renderNavigationItems(navigationItems)}
               </ul>
             </div>
@@ -143,27 +143,43 @@ function NavBarDesktopUserDropdown({ isScrolled }: { isScrolled: boolean }) {
         <DarkModeSwitcher />
       </ul>
       {isUserLoading ? null : !user ? (
-        <WaspRouterLink
-          to={routes.LoginRoute.to}
-          className={cn(
-            "ml-3 font-semibold leading-6 transition-all duration-300",
-            {
-              "text-sm": !isScrolled,
-              "text-xs": isScrolled,
-            },
-          )}
-        >
-          <div className="text-foreground hover:text-primary flex items-center transition-colors duration-300 ease-in-out">
-            Log in{" "}
-            <LogIn
-              size={isScrolled ? "1rem" : "1.1rem"}
-              className={cn("transition-all duration-300", {
-                "ml-1 mt-[0.1rem]": !isScrolled,
-                "ml-1": isScrolled,
-              })}
-            />
-          </div>
-        </WaspRouterLink>
+        <>
+          <WaspRouterLink
+            to={routes.LoginRoute.to}
+            className={cn(
+              "ml-3 font-semibold leading-6 transition-all duration-300",
+              {
+                "text-sm": !isScrolled,
+                "text-xs": isScrolled,
+              },
+            )}
+          >
+            <div className="text-foreground hover:text-primary flex items-center transition-colors duration-300 ease-in-out">
+              Log in{" "}
+              <LogIn
+                size={isScrolled ? "1rem" : "1.1rem"}
+                className={cn("transition-all duration-300", {
+                  "ml-1 mt-[0.1rem]": !isScrolled,
+                  "ml-1": isScrolled,
+                })}
+              />
+            </div>
+          </WaspRouterLink>
+          <WaspRouterLink
+            to={routes.SignupRoute.to}
+            className={cn(
+              "ml-3 font-semibold leading-6 transition-all duration-300",
+              {
+                "text-sm": !isScrolled,
+                "text-xs": isScrolled,
+              },
+            )}
+          >
+            <div className="text-foreground hover:text-primary flex items-center transition-colors duration-300 ease-in-out">
+              Sign Up
+            </div>
+          </WaspRouterLink>
+        </>
       ) : (
         <div className="ml-3">
           <UserDropdown user={user} />
@@ -243,11 +259,18 @@ function NavBarMobileMenu({
               </ul>
               <div className="py-6">
                 {isUserLoading ? null : !user ? (
-                  <WaspRouterLink to={routes.LoginRoute.to}>
-                    <div className="text-foreground hover:text-primary flex items-center justify-end transition-colors duration-300 ease-in-out">
-                      Log in <LogIn size="1.1rem" className="ml-1" />
-                    </div>
-                  </WaspRouterLink>
+                  <div className="space-y-2">
+                    <WaspRouterLink to={routes.LoginRoute.to}>
+                      <div className="text-foreground hover:text-primary flex items-center justify-end transition-colors duration-300 ease-in-out">
+                        Log in <LogIn size="1.1rem" className="ml-1" />
+                      </div>
+                    </WaspRouterLink>
+                    <WaspRouterLink to={routes.SignupRoute.to}>
+                      <div className="text-foreground hover:text-primary flex items-center justify-end transition-colors duration-300 ease-in-out">
+                        Sign Up
+                      </div>
+                    </WaspRouterLink>
+                  </div>
                 ) : (
                   <ul className="space-y-2">
                     <UserMenuItems
@@ -275,18 +298,35 @@ function renderNavigationItems(
   const menuStyles = cn({
     "block rounded-lg px-3 py-2 text-sm font-medium leading-7 text-foreground hover:bg-accent hover:text-accent-foreground transition-colors":
       !!setMobileMenuOpen,
-    "text-sm font-normal leading-6 text-foreground duration-300 ease-in-out hover:text-primary transition-colors":
+    "text-base font-bold leading-6 text-foreground duration-300 ease-in-out hover:text-primary transition-colors":
       !setMobileMenuOpen,
   });
 
   return navigationItems.map((item) => {
+    const isExternalLink = item.to.startsWith("http");
+    
+    if (isExternalLink) {
+      return (
+        <li key={item.name}>
+          <a
+            href={item.to}
+            className={menuStyles}
+            onClick={setMobileMenuOpen && (() => setMobileMenuOpen(false))}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {item.name}
+          </a>
+        </li>
+      );
+    }
+    
     return (
       <li key={item.name}>
         <ReactRouterLink
           to={item.to}
           className={menuStyles}
           onClick={setMobileMenuOpen && (() => setMobileMenuOpen(false))}
-          target={item.to.startsWith("http") ? "_blank" : undefined}
         >
           {item.name}
         </ReactRouterLink>

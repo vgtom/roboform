@@ -153,6 +153,11 @@ page PricingPage {
   component: import PricingPage from "@src/payment/PricingPage"
 }
 
+route ComingSoonRoute { path: "/coming-soon", to: ComingSoonPage }
+page ComingSoonPage {
+  component: import ComingSoonPage from "@src/pages/ComingSoonPage"
+}
+
 route CheckoutResultRoute { path: "/checkout", to: CheckoutResultPage }
 page CheckoutResultPage {
   authRequired: true,
