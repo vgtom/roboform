@@ -89,17 +89,7 @@ async function handleOrderPaid(
   );
 
   switch (paymentPlanId) {
-    case PaymentPlanId.Credits10:
-      await updateUserCredits(
-        {
-          paymentProcessorUserId: order.customerId,
-          numOfCreditsPurchased: paymentPlans[paymentPlanId].effect.amount,
-          datePaid: order.createdAt,
-        },
-        userDelegate,
-      );
-      break;
-    case PaymentPlanId.Hobby:
+    case PaymentPlanId.Starter:
     case PaymentPlanId.Pro:
       await updateUserSubscription(
         {
@@ -110,6 +100,9 @@ async function handleOrderPaid(
         },
         userDelegate,
       );
+      break;
+    case PaymentPlanId.Free:
+      // Free plan doesn't use payment processor
       break;
     default:
       assertUnreachable(paymentPlanId);

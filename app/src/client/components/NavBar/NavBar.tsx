@@ -17,7 +17,6 @@ import { useIsLandingPage } from "../../hooks/useIsLandingPage";
 import logo from "../../static/logo.webp";
 import { cn } from "../../utils";
 import DarkModeSwitcher from "../DarkModeSwitcher";
-import { Announcement } from "./Announcement";
 
 export interface NavigationItem {
   name: string;
@@ -46,7 +45,6 @@ export default function NavBar({
 
   return (
     <>
-      {isLandingPage && <Announcement />}
       <header
         className={cn(
           "sticky top-0 z-50 transition-all duration-300",
@@ -65,29 +63,54 @@ export default function NavBar({
             className={cn(
               "flex items-center justify-between transition-all duration-300",
               {
-                "p-3 lg:px-6": isScrolled,
-                "p-6 lg:px-8": !isScrolled,
+                "p-3 lg:px-12": isScrolled, // Increased spacing significantly
+                "p-6 lg:px-16": !isScrolled, // Increased spacing significantly
               },
             )}
+            style={{
+              paddingLeft: isScrolled ? '4rem' : '5rem', // Space on left
+              paddingRight: isScrolled ? '4rem' : '5rem', // More space on right
+            }}
             aria-label="Global"
           >
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6" style={{ marginLeft: '2rem' }}>
               <WaspRouterLink
                 to={routes.LandingPageRoute.to}
                 className="text-foreground hover:text-primary flex items-center transition-colors duration-300 ease-in-out"
               >
                 <NavLogo isScrolled={isScrolled} />
-                <span
+                <div
                   className={cn(
-                    "text-foreground font-semibold leading-6 transition-all duration-300",
+                    "font-bold italic leading-tight transition-all duration-300 flex items-center",
                     {
-                      "ml-2 text-sm": !isScrolled,
-                      "ml-2 text-xs": isScrolled,
+                      "ml-3 text-4xl": !isScrolled,
+                      "ml-2 text-3xl": isScrolled,
                     },
                   )}
+                  style={{
+                    letterSpacing: '-0.03em',
+                    fontStyle: 'italic',
+                  }}
                 >
-                  Your SaaS
-                </span>
+                  <span 
+                    className="text-[#3b82f6]"
+                    style={{
+                      textShadow: '0 2px 8px rgba(59, 130, 246, 0.4), 0 0 2px rgba(59, 130, 246, 0.2)',
+                      filter: 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3))',
+                    }}
+                  >
+                    Tesla
+                  </span>
+                  <span 
+                    className="text-gray-700 dark:text-gray-300 ml-0.5"
+                    style={{
+                      textShadow: '0 2px 8px rgba(107, 114, 128, 0.3), 0 0 2px rgba(59, 130, 246, 0.2)',
+                      filter: 'drop-shadow(0 2px 4px rgba(107, 114, 128, 0.2))',
+                    }}
+                  >
+                    Forms
+                  </span>
+                </div>
               </WaspRouterLink>
 
               <ul className="ml-4 hidden items-center gap-6 lg:flex">
@@ -110,7 +133,12 @@ function NavBarDesktopUserDropdown({ isScrolled }: { isScrolled: boolean }) {
   const { data: user, isLoading: isUserLoading } = useAuth();
 
   return (
-    <div className="hidden items-center justify-end gap-3 lg:flex lg:flex-1">
+    <div 
+      className="hidden items-center justify-end gap-3 lg:flex lg:flex-1"
+      style={{
+        paddingRight: isScrolled ? '4rem' : '5rem', // More spacing on right
+      }}
+    >
       <ul className="flex items-center justify-center gap-2 sm:gap-4">
         <DarkModeSwitcher />
       </ul>
@@ -178,9 +206,33 @@ function NavBarMobileMenu({
         <SheetContent side="right" className="w-[300px] sm:w-[400px]">
           <SheetHeader>
             <SheetTitle className="flex items-center">
-              <WaspRouterLink to={routes.LandingPageRoute.to}>
-                <span className="sr-only">Your SaaS</span>
+              <WaspRouterLink to={routes.LandingPageRoute.to} className="flex items-center gap-2">
                 <NavLogo isScrolled={false} />
+                <div
+                  className="font-bold leading-tight text-3xl flex items-center"
+                  style={{
+                    letterSpacing: '-0.03em',
+                  }}
+                >
+                  <span 
+                    className="text-[#3b82f6]"
+                    style={{
+                      textShadow: '0 2px 8px rgba(59, 130, 246, 0.4), 0 0 2px rgba(59, 130, 246, 0.2)',
+                      filter: 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3))',
+                    }}
+                  >
+                    Tesla
+                  </span>
+                  <span 
+                    className="text-gray-700 dark:text-gray-300 ml-0.5"
+                    style={{
+                      textShadow: '0 2px 8px rgba(107, 114, 128, 0.3), 0 0 2px rgba(59, 130, 246, 0.2)',
+                      filter: 'drop-shadow(0 2px 4px rgba(107, 114, 128, 0.2))',
+                    }}
+                  >
+                    Forms
+                  </span>
+                </div>
               </WaspRouterLink>
             </SheetTitle>
           </SheetHeader>
@@ -243,13 +295,21 @@ function renderNavigationItems(
   });
 }
 
-const NavLogo = ({ isScrolled }: { isScrolled: boolean }) => (
-  <img
-    className={cn("transition-all duration-500", {
-      "size-8": !isScrolled,
-      "size-7": isScrolled,
-    })}
-    src={logo}
-    alt="Your SaaS App"
-  />
-);
+const NavLogo = ({ isScrolled }: { isScrolled: boolean }) => {
+  // Use TESLA FORMS logo from public folder, fallback to default logo
+  const teslaFormsLogoSrc = "/tesla-forms-logo.jpg";
+  return (
+    <img
+      className={cn("transition-all duration-500", {
+        "size-8": !isScrolled,
+        "size-7": isScrolled,
+      })}
+      src={teslaFormsLogoSrc}
+      alt="TESLA FORMS"
+      onError={(e) => {
+        // Fallback to default logo if TESLA FORMS logo fails to load
+        (e.target as HTMLImageElement).src = logo;
+      }}
+    />
+  );
+};

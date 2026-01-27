@@ -8,9 +8,9 @@ export enum SubscriptionStatus {
 }
 
 export enum PaymentPlanId {
-  Hobby = "hobby",
+  Free = "free",
+  Starter = "starter",
   Pro = "pro",
-  Credits10 = "credits10",
 }
 
 export interface PaymentPlan {
@@ -28,9 +28,13 @@ export type PaymentPlanEffect =
   | { kind: "credits"; amount: number };
 
 export const paymentPlans = {
-  [PaymentPlanId.Hobby]: {
+  [PaymentPlanId.Free]: {
+    getPaymentProcessorPlanId: () => "", // Free plan doesn't use payment processor
+    effect: { kind: "subscription" },
+  },
+  [PaymentPlanId.Starter]: {
     getPaymentProcessorPlanId: () =>
-      requireNodeEnvVar("PAYMENTS_HOBBY_SUBSCRIPTION_PLAN_ID"),
+      requireNodeEnvVar("PAYMENTS_STARTER_SUBSCRIPTION_PLAN_ID"),
     effect: { kind: "subscription" },
   },
   [PaymentPlanId.Pro]: {
@@ -38,21 +42,26 @@ export const paymentPlans = {
       requireNodeEnvVar("PAYMENTS_PRO_SUBSCRIPTION_PLAN_ID"),
     effect: { kind: "subscription" },
   },
-  [PaymentPlanId.Credits10]: {
-    getPaymentProcessorPlanId: () =>
-      requireNodeEnvVar("PAYMENTS_CREDITS_10_PLAN_ID"),
-    effect: { kind: "credits", amount: 10 },
-  },
 } as const satisfies Record<PaymentPlanId, PaymentPlan>;
 
 export function prettyPaymentPlanName(planId: PaymentPlanId): string {
   const planToName: Record<PaymentPlanId, string> = {
-    [PaymentPlanId.Hobby]: "Hobby",
+    [PaymentPlanId.Free]: "Free",
+    [PaymentPlanId.Starter]: "Starter",
     [PaymentPlanId.Pro]: "Pro",
-    [PaymentPlanId.Credits10]: "10 Credits",
   };
   return planToName[planId];
 }
+
+// AI usage limits for each plan (based on request count)
+export const AI_USAGE_LIMITS = {
+  [PaymentPlanId.Free]: { enabled: false, requestLimit: 0 }, // No AI features
+  [PaymentPlanId.Starter]: { enabled: true, requestLimit: 150 }, // 150 AI prompt requests/modifications
+  [PaymentPlanId.Pro]: { enabled: true, requestLimit: 2500 }, // 2500 AI prompt requests/modifications
+} as const;
+
+// Credits limits for free plan
+export const FREE_PLAN_CREDITS = 5;
 
 export function parsePaymentPlanId(planId: string): PaymentPlanId {
   if ((Object.values(PaymentPlanId) as string[]).includes(planId)) {

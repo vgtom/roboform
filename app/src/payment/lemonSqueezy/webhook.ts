@@ -116,20 +116,14 @@ async function handleOrderCreated(
     lemonSqueezyId,
   });
 
-  let numOfCreditsPurchased: number | undefined = undefined;
-  let datePaid: Date | undefined = undefined;
-  if (status === "paid" && plan.effect.kind === "credits") {
-    numOfCreditsPurchased = plan.effect.amount;
-    datePaid = new Date();
-  }
-
+  // All plans are now subscriptions (no credits plan)
+  // Only update customer portal URL and lemonSqueezyId for orders
+  // Subscription details will be handled by subscription_created/updated events
   await updateUserLemonSqueezyPaymentDetails(
     {
       lemonSqueezyId,
       userId,
       lemonSqueezyCustomerPortalUrl,
-      numOfCreditsPurchased,
-      datePaid,
     },
     prismaUserDelegate,
   );

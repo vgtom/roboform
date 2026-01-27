@@ -33,23 +33,38 @@ interface PaymentPlanCard {
 }
 
 export const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
-  [PaymentPlanId.Hobby]: {
-    name: prettyPaymentPlanName(PaymentPlanId.Hobby),
-    price: "$9.99",
-    description: "All you need to get started",
-    features: ["Limited monthly usage", "Basic support"],
+  [PaymentPlanId.Free]: {
+    name: prettyPaymentPlanName(PaymentPlanId.Free),
+    price: "$0",
+    description: "Perfect for getting started",
+    features: [
+      "5 credits (5 forms)",
+      "Basic form builder",
+      "All standard features",
+      "No AI features",
+    ],
+  },
+  [PaymentPlanId.Starter]: {
+    name: prettyPaymentPlanName(PaymentPlanId.Starter),
+    price: "$5.99/month",
+    description: "AI features with 150 requests",
+    features: [
+      "Everything in Free",
+      "AI-powered form generation",
+      "AI form modifications",
+      "150 AI requests included",
+    ],
   },
   [PaymentPlanId.Pro]: {
     name: prettyPaymentPlanName(PaymentPlanId.Pro),
-    price: "$19.99",
-    description: "Our most popular plan",
-    features: ["Unlimited monthly usage", "Priority customer support"],
-  },
-  [PaymentPlanId.Credits10]: {
-    name: prettyPaymentPlanName(PaymentPlanId.Credits10),
-    price: "$9.99",
-    description: "One-time purchase of 10 credits for your account",
-    features: ["Use credits for e.g. OpenAI API calls", "No expiration date"],
+    price: "$34.99/month",
+    description: "Advanced AI features with 2500 requests",
+    features: [
+      "Everything in Starter",
+      "Enhanced AI-powered features",
+      "2500 AI requests included",
+      "Priority support",
+    ],
   },
 };
 
@@ -138,7 +153,7 @@ const PricingPage = () => {
           </Alert>
         )}
         <div className="isolate mx-auto mt-16 grid max-w-md grid-cols-1 gap-y-8 sm:mt-20 lg:mx-0 lg:max-w-none lg:grid-cols-3 lg:gap-x-8">
-          {Object.values(PaymentPlanId).map((planId) => (
+          {[PaymentPlanId.Free, PaymentPlanId.Starter, PaymentPlanId.Pro].map((planId) => (
             <Card
               key={planId}
               className={cn(

@@ -18,9 +18,10 @@ model User {
   paymentProcessorUserId    String?         @unique
   lemonSqueezyCustomerPortalUrl String?     // You can delete this if you're not using Lemon Squeezy as your payments processor.
   subscriptionStatus        String?         // 'active', 'cancel_at_period_end', 'past_due', 'deleted'
-  subscriptionPlan          String?         // 'hobby', 'pro'
+  subscriptionPlan          String?         // 'free', 'starter', 'pro'
   datePaid                  DateTime?
-  credits                   Int             @default(3)
+  credits                   Int             @default(5) // Free plan gets 5 credits
+  aiUsageCount               Int             @default(0) // Track AI request count (prompts/modifications)
 
   gptResponses              GptResponse[]
   contactFormMessages       ContactFormMessage[]
