@@ -20,6 +20,8 @@ interface WorkspaceNavBarProps {
   onOrgChange: (orgId: string) => void;
   onSettingsClick: () => void;
   onInviteClick: () => void;
+  /** When provided, Upgrade button opens this instead of navigating to /pricing (e.g. pricing modal) */
+  onUpgradeClick?: () => void;
 }
 
 export function WorkspaceNavBar({
@@ -27,6 +29,7 @@ export function WorkspaceNavBar({
   selectedOrgId,
   onSettingsClick,
   onInviteClick,
+  onUpgradeClick,
 }: WorkspaceNavBarProps) {
   const { data: user } = useAuth();
   const selectedOrg = organizations.find((org) => org.id === selectedOrgId);
@@ -77,9 +80,15 @@ export function WorkspaceNavBar({
                   <div className="hidden md:block">
                     <p className="text-xs font-semibold text-yellow-900">Upgrade to PRO</p>
                   </div>
-                  <Button asChild variant="default" size="sm" className="h-7 px-3 text-xs bg-yellow-600 hover:bg-yellow-700">
-                    <WaspRouterLink to={routes.PricingPageRoute.to}>Upgrade</WaspRouterLink>
-                  </Button>
+                  {onUpgradeClick ? (
+                    <Button variant="default" size="sm" className="h-7 px-3 text-xs bg-yellow-600 hover:bg-yellow-700" onClick={onUpgradeClick}>
+                      Upgrade
+                    </Button>
+                  ) : (
+                    <Button asChild variant="default" size="sm" className="h-7 px-3 text-xs bg-yellow-600 hover:bg-yellow-700">
+                      <WaspRouterLink to={routes.PricingPageRoute.to}>Upgrade</WaspRouterLink>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             )}

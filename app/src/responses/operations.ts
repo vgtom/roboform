@@ -3,6 +3,7 @@ import type { SubmitFormResponse, GetFormResponses } from "wasp/server/operation
 import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormStatus } from "@prisma/client";
+import { FormSchema, FormField } from "../shared/formTypes";
 
 const submitFormResponseSchema = z.object({
   formId: z.string().uuid(),
@@ -35,18 +36,75 @@ export const submitFormResponse: SubmitFormResponse<
     throw new HttpError(400, "Form is not published");
   }
 
+  // Create the main response record
   const response = await context.entities.FormResponse.create({
     data: {
       formId,
-      responseJson,
+      responseJson, // Keep for backward compatibility
       metadata: metadata || {},
+      fieldResponses: {
+        create: parseResponseToFields(form.schemaJson as FormSchema, responseJson, formId),
+      },
     },
   });
 
   await updateFormAnalytics(formId, "submission");
 
+   // Fire-and-forget integrations (webhooks, etc.). Errors are logged but do not
+   // block the form submission from succeeding.
+   triggerFormIntegrations(formId, response.id, responseJson).catch((error) => {
+     console.error("Error triggering form integrations:", error);
+   });
+
   return response;
 };
+
+async function triggerFormIntegrations(
+  formId: string,
+  responseId: string,
+  responseJson: any,
+): Promise<void> {
+  const integrations = await prisma.formIntegration.findMany({
+    where: { formId, isEnabled: true },
+  });
+
+  if (!integrations.length) {
+    return;
+  }
+
+  for (const integration of integrations) {
+    const config = (integration.configJson || {}) as any;
+    const url = config.url as string | undefined;
+
+    if (!url) {
+      continue;
+    }
+
+    try {
+      // All integrations are implemented as outgoing webhooks for now.
+      // This lets you plug into Slack, Zapier, email services, Calendly, etc.
+      await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(config.headers || {}),
+        },
+        body: JSON.stringify({
+          formId,
+          responseId,
+          provider: integration.provider,
+          payload: responseJson,
+          createdAt: new Date().toISOString(),
+        }),
+      });
+    } catch (error) {
+      console.error(
+        `Error calling ${integration.provider} integration webhook for form ${formId}:`,
+        error,
+      );
+    }
+  }
+}
 
 export const getFormResponses: GetFormResponses<
   z.infer<typeof getFormResponsesSchema>,
@@ -158,6 +216,132 @@ async function updateFormAnalytics(
       });
     }
   }
+}
+
+/**
+ * Parse form response JSON into individual field rows for better analytics
+ */
+function parseResponseToFields(
+  schema: FormSchema,
+  responseJson: Record<string, any>,
+  formId: string,
+): Array<{
+  formId: string;
+  fieldId: string;
+  fieldLabel: string;
+  fieldType: string;
+  value?: string;
+  valueNumber?: number;
+  valueBoolean?: boolean;
+  valueDate?: Date;
+  valueJson?: any;
+}> {
+  const fieldMap = new Map<string, FormField>();
+  schema.fields.forEach((field) => {
+    fieldMap.set(field.id, field);
+  });
+
+  const fieldResponses: Array<{
+    formId: string;
+    fieldId: string;
+    fieldLabel: string;
+    fieldType: string;
+    value?: string;
+    valueNumber?: number;
+    valueBoolean?: boolean;
+    valueDate?: Date;
+    valueJson?: any;
+  }> = [];
+
+  // Process each field in the response
+  for (const [fieldId, responseValue] of Object.entries(responseJson)) {
+    const field = fieldMap.get(fieldId);
+    if (!field) {
+      // Skip unknown fields (might be from old form versions)
+      continue;
+    }
+
+    const baseData = {
+      formId,
+      fieldId,
+      fieldLabel: field.label,
+      fieldType: field.type,
+    };
+
+    // Store value based on field type
+    switch (field.type) {
+      case "number":
+        const numValue = typeof responseValue === "string" 
+          ? parseFloat(responseValue) 
+          : typeof responseValue === "number" 
+            ? responseValue 
+            : null;
+        if (numValue !== null && !isNaN(numValue)) {
+          fieldResponses.push({
+            ...baseData,
+            value: String(numValue),
+            valueNumber: numValue,
+          });
+        }
+        break;
+
+      case "checkbox":
+        fieldResponses.push({
+          ...baseData,
+          value: String(Boolean(responseValue)),
+          valueBoolean: Boolean(responseValue),
+        });
+        break;
+
+      case "date":
+        const dateValue = responseValue 
+          ? new Date(responseValue) 
+          : null;
+        if (dateValue && !isNaN(dateValue.getTime())) {
+          fieldResponses.push({
+            ...baseData,
+            value: dateValue.toISOString(),
+            valueDate: dateValue,
+          });
+        }
+        break;
+
+      case "multiselect":
+      case "file":
+        // Complex types stored as JSON
+        fieldResponses.push({
+          ...baseData,
+          value: Array.isArray(responseValue) 
+            ? responseValue.join(", ") 
+            : String(responseValue || ""),
+          valueJson: responseValue,
+        });
+        break;
+
+      case "select":
+      case "radio":
+        // Single selection - store as string and JSON
+        fieldResponses.push({
+          ...baseData,
+          value: String(responseValue || ""),
+          valueJson: responseValue,
+        });
+        break;
+
+      case "text":
+      case "textarea":
+      case "email":
+      default:
+        // Text-based fields
+        fieldResponses.push({
+          ...baseData,
+          value: String(responseValue || ""),
+        });
+        break;
+    }
+  }
+
+  return fieldResponses;
 }
 
 export { updateFormAnalytics };

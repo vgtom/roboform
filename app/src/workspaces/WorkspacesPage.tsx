@@ -67,6 +67,7 @@ import { Textarea } from "../client/components/ui/textarea";
 import { WorkspaceNavBar } from "./WorkspaceNavBar";
 import { getRandomColorForId } from "../shared/utils";
 import { cn } from "../client/utils";
+import { PricingModal } from "../payment/PricingModal";
 
 export default function WorkspacesPage() {
   const { data: user } = useAuth();
@@ -84,6 +85,7 @@ export default function WorkspacesPage() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [createFormMode, setCreateFormMode] = useState<"manual" | "ai">("manual");
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
 
   const { data: organizations, isLoading: orgsLoading } = useQuery(
     getUserOrganizations,
@@ -271,6 +273,7 @@ export default function WorkspacesPage() {
         onOrgChange={setSelectedOrgId}
         onSettingsClick={() => setIsOrgSettingsOpen(true)}
         onInviteClick={() => setIsInviteDialogOpen(true)}
+        onUpgradeClick={() => setIsPricingModalOpen(true)}
       />
 
       <div className="container mx-auto p-6 max-w-7xl">
@@ -303,8 +306,8 @@ export default function WorkspacesPage() {
                           </p>
                         </div>
                       </div>
-                      <Button asChild variant="default" size="sm">
-                        <Link to="/pricing">Upgrade Plan</Link>
+                      <Button variant="default" size="sm" onClick={() => setIsPricingModalOpen(true)}>
+                        Upgrade Plan
                       </Button>
                     </div>
                   </div>
@@ -694,6 +697,8 @@ export default function WorkspacesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <PricingModal open={isPricingModalOpen} onClose={() => setIsPricingModalOpen(false)} />
       </div>
     </div>
   );

@@ -368,6 +368,11 @@ query getForm {
   entities: [User, Form, Workspace, Organization, OrganizationMember]
 }
 
+query getFormIntegrations {
+  fn: import { getFormIntegrations } from "@src/forms/operations",
+  entities: [User, Form, Workspace, Organization, OrganizationMember, FormIntegration]
+}
+
 query getPublicForm {
   fn: import { getPublicForm } from "@src/forms/operations",
   entities: [Form]
@@ -393,9 +398,14 @@ action publishForm {
   entities: [User, Form, Workspace, Organization, OrganizationMember]
 }
 
+action upsertFormIntegration {
+  fn: import { upsertFormIntegration } from "@src/forms/operations",
+  entities: [User, Form, Workspace, Organization, OrganizationMember, FormIntegration]
+}
+
 action submitFormResponse {
   fn: import { submitFormResponse } from "@src/responses/operations",
-  entities: [Form, FormResponse, FormAnalytics]
+  entities: [Form, FormResponse, FormResponseField, FormAnalytics]
 }
 
 query getFormResponses {

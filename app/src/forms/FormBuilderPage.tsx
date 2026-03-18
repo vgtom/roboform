@@ -5,6 +5,10 @@ import {
   updateForm,
   publishForm,
   modifyFormWithAI,
+  getFormIntegrations,
+  upsertFormIntegration,
+  getFormAnalytics,
+  getFormResponses,
 } from "wasp/client/operations";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../client/components/ui/button";
@@ -61,6 +65,15 @@ import {
   Link2,
   QrCode,
   X,
+  Play,
+  Percent,
+  Clock,
+  Calendar,
+  Smartphone,
+  Monitor,
+  HelpCircle,
+  Lock,
+  TrendingUp,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
 import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
@@ -76,6 +89,7 @@ import {
   DialogTitle,
 } from "../client/components/ui/dialog";
 import { FormSlideshow } from "./FormSlideshow";
+import { PricingModal } from "../payment/PricingModal";
 
 export default function FormBuilderPage() {
   const { formId, workspaceId } = useParams<{ formId: string; workspaceId: string }>();
@@ -89,6 +103,7 @@ export default function FormBuilderPage() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishSuccessOpen, setIsPublishSuccessOpen] = useState(false);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
 
   const { data: user } = useAuth();
   const { data: form, isLoading, refetch: refetchForm } = useQuery(
@@ -438,6 +453,7 @@ export default function FormBuilderPage() {
       {/* Main Content Area - Three Columns */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Blocks */}
+        {activeTab === "build" && (
         <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-2">
@@ -472,8 +488,9 @@ export default function FormBuilderPage() {
             </div>
           </div>
         </div>
+        )}
 
-        {/* Center - Build Page Content */}
+        {/* Center - Build / Integrate / Share / Results Content */}
         {activeTab === "build" ? (
           <div className="flex-1 flex flex-col bg-white overflow-hidden">
             {/* Build Sub-Tabs: Logic, Design, Preview, Upgrade */}
@@ -547,8 +564,8 @@ export default function FormBuilderPage() {
                         </p>
                       </div>
                     </div>
-                    <Button asChild variant="default" size="sm">
-                      <Link to="/pricing">Upgrade Plan</Link>
+                    <Button variant="default" size="sm" onClick={() => setIsPricingModalOpen(true)}>
+                      Upgrade Plan
                     </Button>
                   </div>
                 </div>
@@ -630,17 +647,23 @@ export default function FormBuilderPage() {
               </div>
             </div>
           </div>
-        ) : (
-          /* Other tabs content (Integrate, Share, Results) */
-          <div className="flex-1 bg-white flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <p className="text-lg font-semibold mb-2">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</p>
-              <p className="text-sm">This section is coming soon</p>
-            </div>
-          </div>
-        )}
+        ) : activeTab === "integrate" ? (
+          <IntegrationsTab
+            formId={formId}
+            formName={form?.name || schema.title || "Untitled Form"}
+          />
+        ) : activeTab === "share" ? (
+          <ShareTab
+            formId={formId}
+            formName={form?.name || schema.title || "Untitled Form"}
+            formStatus={form?.status}
+          />
+        ) : activeTab === "results" ? (
+          <ResultsTab formId={formId} formName={form?.name || schema.title || "Untitled Form"} onOpenPricingModal={() => setIsPricingModalOpen(true)} />
+        ) : null}
 
           {/* Right Sidebar - Properties */}
+        {activeTab === "build" && (
         <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto">
           {selectedField ? (
             <PropertiesPanel
@@ -666,6 +689,7 @@ export default function FormBuilderPage() {
             />
           )}
         </div>
+        )}
       </div>
 
       {/* Preview Modal */}
@@ -703,6 +727,8 @@ export default function FormBuilderPage() {
           onClose={() => setIsPublishSuccessOpen(false)}
         />
       )}
+
+      <PricingModal open={isPricingModalOpen} onClose={() => setIsPricingModalOpen(false)} />
     </div>
   );
 }
@@ -912,6 +938,780 @@ function PublishSuccessModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type IntegrationProviderKey = "email" | "webhook" | "slack" | "zapier" | "calendly";
+
+const INTEGRATION_DEFINITIONS: Array<{
+  key: IntegrationProviderKey;
+  title: string;
+  description: string;
+  placeholderUrl: string;
+}> = [
+  {
+    key: "email",
+    title: "Email",
+    description:
+      "Send new form submissions to your email provider via a webhook (e.g. Zapier, Make, custom API).",
+    placeholderUrl: "https://your-email-or-automation-webhook-url",
+  },
+  {
+    key: "webhook",
+    title: "Webhooks",
+    description:
+      "Send a POST request with each submission to any HTTPS endpoint you control.",
+    placeholderUrl: "https://your-backend.example.com/webhooks/forms",
+  },
+  {
+    key: "slack",
+    title: "Slack",
+    description:
+      "Post new submissions into a Slack channel using a Slack incoming webhook URL.",
+    placeholderUrl: "https://hooks.slack.com/services/XXX/YYY/ZZZ",
+  },
+  {
+    key: "zapier",
+    title: "Zapier",
+    description:
+      "Trigger a Zap whenever you get a new submission using a Zapier Catch Hook URL.",
+    placeholderUrl: "https://hooks.zapier.com/hooks/catch/...",
+  },
+  {
+    key: "calendly",
+    title: "Calendly",
+    description:
+      "Send submissions to Calendly or workflows that react to a webhook payload.",
+    placeholderUrl: "https://your-calendly-or-workflow-webhook-url",
+  },
+];
+
+function IntegrationsTab({
+  formId,
+  formName,
+}: {
+  formId: string | undefined;
+  formName: string;
+}) {
+  const { toast } = useToast();
+
+  const {
+    data: integrations,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery(
+    getFormIntegrations,
+    formId ? { formId } : undefined,
+  );
+
+  const [localConfigs, setLocalConfigs] = useState<
+    Record<IntegrationProviderKey, { enabled: boolean; url: string }>
+  >({
+    email: { enabled: false, url: "" },
+    webhook: { enabled: false, url: "" },
+    slack: { enabled: false, url: "" },
+    zapier: { enabled: false, url: "" },
+    calendly: { enabled: false, url: "" },
+  });
+
+  useEffect(() => {
+    if (!integrations) return;
+
+    setLocalConfigs((prev) => {
+      const next = { ...prev };
+      for (const integration of integrations as Array<{
+        provider: string;
+        isEnabled: boolean;
+        configJson: any;
+      }>) {
+        const key = integration.provider as IntegrationProviderKey;
+        if (!INTEGRATION_DEFINITIONS.find((def) => def.key === key)) continue;
+        const cfg = integration.configJson || {};
+        next[key] = {
+          enabled: integration.isEnabled,
+          url: typeof cfg.url === "string" ? cfg.url : "",
+        };
+      }
+      return next;
+    });
+  }, [integrations]);
+
+  if (!formId) {
+    return (
+      <div className="flex-1 bg-white flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <p className="text-lg font-semibold mb-2">Integrations</p>
+          <p className="text-sm">
+            Form ID is missing. Please reload the page and try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleToggle = (key: IntegrationProviderKey, enabled: boolean) => {
+    setLocalConfigs((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || { url: "" }),
+        enabled,
+      },
+    }));
+  };
+
+  const handleUrlChange = (key: IntegrationProviderKey, url: string) => {
+    setLocalConfigs((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || { enabled: false }),
+        url,
+      },
+    }));
+  };
+
+  const handleSave = async (key: IntegrationProviderKey) => {
+    const cfg = localConfigs[key];
+    if (!cfg) return;
+
+    try {
+      await upsertFormIntegration({
+        formId,
+        provider: key,
+        isEnabled: cfg.enabled && !!cfg.url,
+        config: {
+          url: cfg.url,
+        },
+      });
+
+      toast({
+        title: "Integration saved",
+        description: `${
+          INTEGRATION_DEFINITIONS.find((d) => d.key === key)?.title ??
+          "Integration"
+        } updated for “${formName}”.`,
+      });
+
+      refetch();
+    } catch (_error) {
+      toast({
+        title: "Error saving integration",
+        description: "Please try again, or check your network connection.",
+        variant: "destructive",
+      } as any);
+    }
+  };
+
+  return (
+    <div className="flex-1 bg-white overflow-y-auto w-full">
+      <div className="max-w-7xl mx-auto py-8 px-6 sm:px-8 xl:px-12">
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">
+            Integrations
+          </h2>
+          <p className="text-sm text-gray-600">
+            Connect <span className="font-medium">{formName}</span> to email,
+            webhooks, Slack, Zapier, Calendly, and more using outgoing
+            webhooks. Each submission will be sent as a JSON payload.
+          </p>
+        </div>
+
+        {isLoading && (
+          <div className="text-sm text-gray-500 mb-4">
+            Loading integrations…
+          </div>
+        )}
+        {error && (
+          <div className="text-sm text-red-600 mb-4">
+            Unable to load integrations. Please refresh the page.
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {INTEGRATION_DEFINITIONS.map((def) => {
+            const cfg = localConfigs[def.key];
+            return (
+              <div
+                key={def.key}
+                className="border border-gray-200 rounded-lg p-4 flex flex-col gap-3 bg-gray-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {def.title}
+                    </h3>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {def.description}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">
+                      {cfg?.enabled ? "Enabled" : "Disabled"}
+                    </span>
+                    <Switch
+                      checked={cfg?.enabled || false}
+                      onCheckedChange={(value) =>
+                        handleToggle(def.key, Boolean(value))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-700">Webhook URL</Label>
+                  <Input
+                    value={cfg?.url || ""}
+                    onChange={(e) => handleUrlChange(def.key, e.target.value)}
+                    placeholder={def.placeholderUrl}
+                    className="text-xs"
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    On each submission we send a{" "}
+                    <code className="font-mono">POST</code> request with JSON
+                    containing <code>formId</code>, <code>responseId</code>,{" "}
+                    <code>provider</code> and <code>payload</code>.
+                  </p>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSave(def.key)}
+                    disabled={!cfg?.url}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareTab({
+  formId,
+  formName,
+  formStatus,
+}: {
+  formId: string | undefined;
+  formName: string;
+  formStatus?: string;
+}) {
+  const { toast } = useToast();
+  const [embedType, setEmbedType] = useState<"inline" | "popup">("inline");
+  const [embedMethod, setEmbedMethod] = useState<"js" | "iframe">("js");
+  const [embedWidth, setEmbedWidth] = useState("100%");
+  const [embedHeight, setEmbedHeight] = useState("700");
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedSnippet1, setCopiedSnippet1] = useState(false);
+  const [copiedSnippet2, setCopiedSnippet2] = useState(false);
+
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const formUrl = formId ? `${baseUrl}/f/${formId}` : "";
+
+  const embedDivSnippet = formId
+    ? `<div data-youform-embed data-form='${formId}' data-base-url='${baseUrl}' data-width='${embedWidth}' data-height='${embedHeight}'></div>`
+    : "";
+  const embedScriptSnippet = baseUrl ? `<script src="${baseUrl}/embed.js"></script>` : "";
+
+  const handleCopyLink = () => {
+    if (!formUrl) return;
+    navigator.clipboard.writeText(formUrl);
+    setCopiedLink(true);
+    toast({ title: "Link copied", description: "Form link copied to clipboard." });
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopySnippet1 = () => {
+    if (!embedDivSnippet) return;
+    navigator.clipboard.writeText(embedDivSnippet);
+    setCopiedSnippet1(true);
+    toast({ title: "Code copied", description: "Embed snippet copied to clipboard." });
+    setTimeout(() => setCopiedSnippet1(false), 2000);
+  };
+
+  const handleCopySnippet2 = () => {
+    if (!embedScriptSnippet) return;
+    navigator.clipboard.writeText(embedScriptSnippet);
+    setCopiedSnippet2(true);
+    toast({ title: "Code copied", description: "Script tag copied to clipboard." });
+    setTimeout(() => setCopiedSnippet2(false), 2000);
+  };
+
+  const handleShare = (platform: string) => {
+    const shareUrl = encodeURIComponent(formUrl);
+    const shareText = encodeURIComponent(`Check out this form: ${formName}`);
+    let url = "";
+    switch (platform) {
+      case "facebook":
+        url = `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`;
+        break;
+      case "twitter":
+        url = `https://twitter.com/intent/tweet?url=${shareUrl}&text=${shareText}`;
+        break;
+      case "linkedin":
+        url = `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`;
+        break;
+      default:
+        return;
+    }
+    if (url) window.open(url, "_blank", "width=600,height=400");
+  };
+
+  const handleConfigureEmbed = () => {
+    toast({ title: "Configure", description: "Embed configuration options coming soon." });
+  };
+
+  if (!formId) {
+    return (
+      <div className="flex-1 bg-white flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <p className="text-lg font-semibold mb-2">Share</p>
+          <p className="text-sm">Form ID is missing. Please reload the page and try again.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isPublished = formStatus === "PUBLISHED";
+
+  return (
+    <div className="flex-1 bg-white overflow-y-auto w-full">
+      <div className="max-w-5xl mx-auto py-8 px-6 space-y-8 sm:px-8 xl:px-12">
+        {!isPublished && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3">
+            Your form is not published yet. Publish it from the top bar before sharing.
+          </div>
+        )}
+        {/* Direct Form Link */}
+        <div>
+          <div className="flex gap-2 mb-2">
+            <Input
+              value={formUrl}
+              readOnly
+              className="flex-1 bg-gray-50 border-gray-200 font-mono text-sm"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyLink}
+              className="shrink-0"
+            >
+              {copiedLink ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+              {copiedLink ? "Copied" : "Copy Link"}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Make sure your form is published before you share it to the world.
+          </p>
+        </div>
+
+        {/* Social sharing icons */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => window.open(formUrl, "_blank")}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            title="Open in new tab"
+          >
+            <Share2 className="h-5 w-5 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleShare("facebook")}
+            className="p-2 rounded-lg hover:bg-blue-50 transition-colors text-blue-600 font-semibold text-sm"
+            title="Share on Facebook"
+          >
+            f
+          </button>
+          <button
+            type="button"
+            onClick={() => handleShare("twitter")}
+            className="p-2 rounded-lg hover:bg-sky-50 transition-colors text-sky-600 font-semibold text-sm"
+            title="Share on X / Twitter"
+          >
+            𝕏
+          </button>
+          <button
+            type="button"
+            onClick={() => handleShare("linkedin")}
+            className="p-2 rounded-lg hover:bg-blue-50 transition-colors text-blue-700 font-semibold text-sm"
+            title="Share on LinkedIn"
+          >
+            in
+          </button>
+          <button
+            type="button"
+            onClick={() => toast({ title: "QR Code", description: "QR code feature coming soon." })}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            title="Generate QR code"
+          >
+            <QrCode className="h-5 w-5 text-gray-600" />
+          </button>
+        </div>
+
+        {/* Embed in your website */}
+        <div className="border-t border-gray-200 pt-8">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Embed in your website as</h3>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <Select value={embedType} onValueChange={(v: "inline" | "popup") => setEmbedType(v)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inline">Inline embed</SelectItem>
+                <SelectItem value="popup">Popup embed</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-gray-600">of type</span>
+            <Select value={embedMethod} onValueChange={(v: "js" | "iframe") => setEmbedMethod(v)}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="js">JS embed</SelectItem>
+                <SelectItem value="iframe">iframe</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Works with WordPress, Squarespace, Wix, Shopify, Webflow, Carrd, and all other website builders.
+          </p>
+          <div className="flex justify-end mb-4">
+            <Button variant="default" size="sm" onClick={handleConfigureEmbed}>
+              <Plus className="h-4 w-4 mr-2" />
+              Configure
+            </Button>
+          </div>
+
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            Paste the below code snippet in your page where you want to show it:
+          </p>
+          <div className="relative rounded-lg bg-gray-900 p-4 pr-12 font-mono text-sm text-gray-100 overflow-x-auto">
+            <pre className="whitespace-pre-wrap break-all">{embedDivSnippet}</pre>
+            <button
+              type="button"
+              onClick={handleCopySnippet1}
+              className="absolute top-3 right-3 p-2 rounded hover:bg-gray-700 transition-colors"
+              title="Copy"
+            >
+              {copiedSnippet1 ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-gray-400" />}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 mb-4">
+            You can configure the embed settings above. Learn more about the{" "}
+            <a href="#" className="text-blue-600 hover:underline">embed code here</a>.
+          </p>
+
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            Then include the following script tag below the above tag:
+          </p>
+          <div className="relative rounded-lg bg-gray-900 p-4 pr-12 font-mono text-sm text-gray-100 overflow-x-auto">
+            <pre className="whitespace-pre-wrap break-all">{embedScriptSnippet}</pre>
+            <button
+              type="button"
+              onClick={handleCopySnippet2}
+              className="absolute top-3 right-3 p-2 rounded hover:bg-gray-700 transition-colors"
+              title="Copy"
+            >
+              {copiedSnippet2 ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-gray-400" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Custom Domain - PRO */}
+        <div className="border-t border-gray-200 pt-8">
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-sm font-semibold text-gray-900">Custom Domain</h3>
+            <span className="px-2 py-0.5 text-xs font-semibold rounded bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200">
+              PRO
+            </span>
+          </div>
+          <p className="text-sm text-gray-600">
+            Please buy a PRO plan to add your own custom domain.
+          </p>
+        </div>
+
+        {/* Link Settings footer */}
+        <p className="text-sm text-gray-500 border-t border-gray-200 pt-6">
+          To change form Title, share image or favicon go to{" "}
+          <a href="#" className="text-blue-600 hover:underline">Link Settings</a>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type ResultsSubTab = "submissions" | "summary" | "analytics";
+
+function ResultsTab({
+  formId,
+  formName,
+  onOpenPricingModal,
+}: {
+  formId: string | undefined;
+  formName: string;
+  onOpenPricingModal?: () => void;
+}) {
+  const [resultsSubTab, setResultsSubTab] = useState<ResultsSubTab>("analytics");
+  const [timeRange, setTimeRange] = useState("all");
+  const [deviceFilter, setDeviceFilter] = useState("all");
+  const [trendsMetric, setTrendsMetric] = useState<"views" | "submissions" | "completion">("views");
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery(
+    getFormAnalytics,
+    formId ? { formId } : undefined,
+  );
+  const { data: responses, isLoading: responsesLoading } = useQuery(
+    getFormResponses,
+    formId ? { formId } : undefined,
+  );
+
+  const views = analytics?.views ?? 0;
+  const submissions = analytics?.submissions ?? 0;
+  const completionRate = analytics?.completionRate ?? 0;
+  const starts = views; // "Starts" can match views for now
+  const completionTime = "--"; // Not tracked yet
+
+  const kpiCards = [
+    {
+      label: "Views",
+      value: String(views),
+      icon: Eye,
+      className: "bg-purple-50 border-purple-200 text-purple-900",
+      iconClassName: "text-purple-600",
+    },
+    {
+      label: "Starts",
+      value: String(views),
+      icon: Play,
+      className: "bg-blue-50 border-blue-200 text-blue-900",
+      iconClassName: "text-blue-600",
+    },
+    {
+      label: "Submissions",
+      value: String(submissions),
+      icon: Check,
+      className: "bg-green-50 border-green-200 text-green-900",
+      iconClassName: "text-green-600",
+    },
+    {
+      label: "% Completion Rate",
+      value: views > 0 ? `${completionRate.toFixed(1)}%` : "--",
+      icon: Percent,
+      className: "bg-orange-50 border-orange-200 text-orange-900",
+      iconClassName: "text-orange-600",
+    },
+    {
+      label: "Completion Time",
+      value: completionTime,
+      icon: Clock,
+      className: "bg-gray-50 border-gray-200 text-gray-900",
+      iconClassName: "text-gray-600",
+    },
+  ];
+
+  if (!formId) {
+    return (
+      <div className="flex-1 bg-white flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <p className="text-lg font-semibold mb-2">Results</p>
+          <p className="text-sm">Form ID is missing. Please reload the page and try again.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 bg-white overflow-y-auto flex flex-col w-full">
+      <div className="w-full mx-auto py-6 px-6 sm:px-8 xl:px-12">
+        {/* Sub-tabs: Submissions | Summary | Analytics */}
+        <div className="flex items-center justify-between border-b border-gray-200 pb-3 mb-6">
+          <div className="flex items-center gap-1">
+            {(["submissions", "summary", "analytics"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setResultsSubTab(tab)}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium border-b-2 -mb-[11px] transition-colors",
+                  resultsSubTab === tab
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                )}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+          <a
+            href="#"
+            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help
+          </a>
+        </div>
+
+        {resultsSubTab === "submissions" && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900">Submissions</h3>
+            {responsesLoading ? (
+              <p className="text-sm text-gray-500">Loading…</p>
+            ) : !responses?.length ? (
+              <p className="text-sm text-gray-500">No submissions yet.</p>
+            ) : (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left py-2 px-3 font-medium text-gray-700">Submitted</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-700">Response</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {responses.slice(0, 50).map((r: { id: string; createdAt: Date; responseJson: any }) => (
+                      <tr key={r.id} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2 px-3 text-gray-600">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-gray-900 font-mono text-xs truncate max-w-[200px]">
+                          {typeof r.responseJson === "object"
+                            ? JSON.stringify(r.responseJson).slice(0, 60) + "..."
+                            : String(r.responseJson)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {resultsSubTab === "summary" && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900">Summary</h3>
+            <p className="text-sm text-gray-500">
+              Overview of responses and field-level stats. More summary options coming soon.
+            </p>
+          </div>
+        )}
+
+        {resultsSubTab === "analytics" && (
+          <>
+            {/* Filters */}
+            <div className="flex items-center gap-2 mb-6">
+              <Select value={timeRange} onValueChange={setTimeRange}>
+                <SelectTrigger className="w-[140px]">
+                  <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                  <SelectValue placeholder="All Time" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="7d">Last 7 days</SelectItem>
+                  <SelectItem value="30d">Last 30 days</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={deviceFilter} onValueChange={setDeviceFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <Smartphone className="h-4 w-4 mr-2 text-gray-500" />
+                  <SelectValue placeholder="All Devices" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Devices</SelectItem>
+                  <SelectItem value="desktop">Desktop</SelectItem>
+                  <SelectItem value="mobile">Mobile</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+              {kpiCards.map((card) => (
+                <div
+                  key={card.label}
+                  className={cn(
+                    "rounded-lg border p-4 flex flex-col gap-2",
+                    card.className
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium opacity-90">{card.label}</span>
+                    <card.icon className={cn("h-4 w-4", card.iconClassName)} />
+                  </div>
+                  <span className="text-xl font-semibold">{card.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Pink banner - Analytics limited */}
+            <div className="rounded-lg bg-pink-50 border border-pink-200 p-4 mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Check className="h-5 w-5 text-pink-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-pink-900">Analytics are limited</p>
+                  <p className="text-sm text-pink-700">
+                    See trends and the drop-off rate for each question in your form.{" "}
+                    <a href="#" className="underline">Learn more</a>.
+                  </p>
+                </div>
+              </div>
+              <Button size="sm" className="bg-pink-600 hover:bg-pink-700 text-white shrink-0" onClick={() => onOpenPricingModal?.()}>
+                Buy TeslaForms PRO →
+              </Button>
+            </div>
+
+            {/* Trends */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-900">Trends</h3>
+                <Select
+                  value={trendsMetric}
+                  onValueChange={(v: "views" | "submissions" | "completion") => setTrendsMetric(v)}
+                >
+                  <SelectTrigger className="w-[130px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="views">Views</SelectItem>
+                    <SelectItem value="submissions">Submissions</SelectItem>
+                    <SelectItem value="completion">Completion Rate</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="relative rounded-lg border border-gray-200 bg-gray-50 min-h-[280px] flex items-center justify-center">
+                {/* Placeholder chart - simple line/shade visual */}
+                <div className="absolute inset-0 flex items-end justify-around px-4 pb-8 pt-4 gap-1">
+                  {[40, 65, 45, 80, 55, 70, 90].map((h, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 max-w-[40px] rounded-t bg-purple-200/60"
+                      style={{ height: `${h}%` }}
+                    />
+                  ))}
+                </div>
+                {/* PRO overlay */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg z-10">
+                  <Button
+                    size="sm"
+                    className="bg-gray-900 hover:bg-gray-800 text-white gap-2"
+                    onClick={() => onOpenPricingModal?.()}
+                  >
+                    <Lock className="h-4 w-4" />
+                    Buy PRO
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

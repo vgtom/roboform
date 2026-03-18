@@ -42,6 +42,7 @@ import {
   prettyPaymentPlanName,
 } from "../payment/plans";
 import { cn } from "../client/utils";
+import { PricingModal } from "../payment/PricingModal";
 
 type SettingsTab = "settings" | "members" | "smtp" | "billing";
 
@@ -50,6 +51,7 @@ export default function OrganizationSettingsPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
 
   const { data: organizations, isLoading } = useQuery(
     getUserOrganizations,
@@ -92,7 +94,10 @@ export default function OrganizationSettingsPage() {
         }}
         onSettingsClick={() => {}}
         onInviteClick={() => {}}
+        onUpgradeClick={() => setIsPricingModalOpen(true)}
       />
+
+      <PricingModal open={isPricingModalOpen} onClose={() => setIsPricingModalOpen(false)} />
 
       <div className="container mx-auto p-6 max-w-7xl">
         {/* Breadcrumb */}
