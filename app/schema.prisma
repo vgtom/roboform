@@ -183,6 +183,8 @@ model Form {
   workspaceId               String
 
   responses                 FormResponse[]
+  responseFields            FormResponseField[]
+  integrations              FormIntegration[]
   analytics                 FormAnalytics?
 
   @@unique([workspaceId, slug])
@@ -197,11 +199,69 @@ model FormResponse {
   form                      Form            @relation(fields: [formId], references: [id], onDelete: Cascade)
   formId                    String
 
-  responseJson              Json            // User's response data
-  metadata                  Json?           // IP, user agent, etc.
+  responseJson              Json?           // Keep for backward compatibility, but prefer FormResponseField
+  metadata                  Json?           // IP, user agent, referrer, etc.
+
+  // Individual field responses stored as rows for better analytics
+  fieldResponses            FormResponseField[]
 
   @@index([formId])
+  @@index([createdAt])
 }
+
+model FormIntegration {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // The form this integration belongs to
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formId      String
+
+  // Logical provider key, e.g. "email", "webhook", "slack", "zapier", "calendly"
+  provider    String
+
+  // Whether this integration is active for the form
+  isEnabled   Boolean  @default(false)
+
+  // Provider-specific configuration (webhook URL, headers, etc.)
+  configJson  Json?
+
+  @@unique([formId, provider])
+  @@index([formId])
+}
+
+model FormResponseField {
+  id                        String          @id @default(uuid())
+  createdAt                 DateTime        @default(now())
+
+  submission                FormResponse    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submissionId              String
+
+  form                      Form            @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formId                    String
+
+  // Field identification from form schema
+  fieldId                   String          // ID from FormSchema.fields[].id
+  fieldLabel                String          // Label from FormSchema.fields[].label
+  fieldType                 String          // Type from FormSchema.fields[].type (text, email, select, etc.)
+
+  // Response value - stored as string for flexibility, can be parsed based on fieldType
+  value                     String?         // For text, email, textarea, number (as string)
+  valueNumber               Float?          // For number fields (for numeric aggregations)
+  valueBoolean              Boolean?        // For checkbox fields
+  valueDate                 DateTime?       // For date fields
+  valueJson                 Json?           // For complex types (multiselect, file uploads, etc.)
+
+  @@index([submissionId])
+  @@index([formId])
+  @@index([fieldId])
+  @@index([fieldType])
+  @@index([formId, fieldId]) // For form-specific field analytics
+  @@index([createdAt])
+}
+
+// Add relation to FormResponseField in FormResponse
 
 model FormAnalytics {
   id                        String          @id @default(uuid())

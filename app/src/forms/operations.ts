@@ -8,6 +8,8 @@ import type {
   DeleteForm,
   PublishForm,
   GetPublicForm,
+  GetFormIntegrations,
+  UpsertFormIntegration,
 } from "wasp/server/operations";
 import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
@@ -42,6 +44,17 @@ const publishFormSchema = z.object({
 
 const getPublicFormSchema = z.object({
   id: z.string().uuid(),
+});
+
+const getFormIntegrationsSchema = z.object({
+  formId: z.string().uuid(),
+});
+
+const upsertFormIntegrationSchema = z.object({
+  formId: z.string().uuid(),
+  provider: z.enum(["email", "webhook", "slack", "zapier", "calendly"]),
+  isEnabled: z.boolean(),
+  config: z.any().optional(),
 });
 
 async function checkFormAccess(
@@ -310,6 +323,89 @@ export const getForm: GetForm<
   await checkFormAccess(context.user.id, form.workspaceId);
 
   return form;
+};
+
+export const getFormIntegrations: GetFormIntegrations<
+  z.infer<typeof getFormIntegrationsSchema>,
+  Array<{ id: string; provider: string; isEnabled: boolean; configJson: any }>
+> = async (rawArgs, context) => {
+  if (!context.user) {
+    throw new HttpError(401, "Authentication required");
+  }
+
+  const { formId } = ensureArgsSchemaOrThrowHttpError(
+    getFormIntegrationsSchema,
+    rawArgs,
+  );
+
+  const form = await prisma.form.findUnique({
+    where: { id: formId },
+    include: { workspace: { include: { organization: true } } },
+  });
+
+  if (!form) {
+    throw new HttpError(404, "Form not found");
+  }
+
+  // Require at least EDITOR to manage integrations
+  await checkFormAccess(context.user.id, form.workspaceId, OrganizationRole.EDITOR);
+
+  const integrations = await prisma.formIntegration.findMany({
+    where: { formId },
+    select: {
+      id: true,
+      provider: true,
+      isEnabled: true,
+      configJson: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return integrations;
+};
+
+export const upsertFormIntegration: UpsertFormIntegration<
+  z.infer<typeof upsertFormIntegrationSchema>,
+  { id: string; provider: string; isEnabled: boolean; configJson: any }
+> = async (rawArgs, context) => {
+  if (!context.user) {
+    throw new HttpError(401, "Authentication required");
+  }
+
+  const { formId, provider, isEnabled, config } =
+    ensureArgsSchemaOrThrowHttpError(upsertFormIntegrationSchema, rawArgs);
+
+  const form = await prisma.form.findUnique({
+    where: { id: formId },
+    include: { workspace: { include: { organization: true } } },
+  });
+
+  if (!form) {
+    throw new HttpError(404, "Form not found");
+  }
+
+  await checkFormAccess(context.user.id, form.workspaceId, OrganizationRole.EDITOR);
+
+  const integration = await prisma.formIntegration.upsert({
+    where: {
+      formId_provider: {
+        formId,
+        provider,
+      },
+    },
+    create: {
+      formId,
+      provider,
+      isEnabled,
+      configJson: config || {},
+    },
+    update: {
+      isEnabled,
+      configJson: config || {},
+    },
+  });
+
+  return integration;
 };
 
 export const updateForm: UpdateForm<
