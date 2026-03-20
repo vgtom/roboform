@@ -1662,7 +1662,7 @@ function ResultsTab({
                 </div>
               </div>
               <Button size="sm" className="bg-pink-600 hover:bg-pink-700 text-white shrink-0" onClick={() => onOpenPricingModal?.()}>
-                Buy TeslaForms PRO →
+                Buy VinForms PRO →
               </Button>
             </div>
 
