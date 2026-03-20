@@ -99,7 +99,7 @@ export default function NavBar({
                       filter: 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3))',
                     }}
                   >
-                    Tesla
+                    Vin
                   </span>
                   <span 
                     className="text-gray-700 dark:text-gray-300 ml-0.5"
@@ -237,7 +237,7 @@ function NavBarMobileMenu({
                       filter: 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3))',
                     }}
                   >
-                    Tesla
+                    Vin
                   </span>
                   <span 
                     className="text-gray-700 dark:text-gray-300 ml-0.5"
@@ -336,18 +336,18 @@ function renderNavigationItems(
 }
 
 const NavLogo = ({ isScrolled }: { isScrolled: boolean }) => {
-  // Use TESLA FORMS logo from public folder, fallback to default logo
-  const teslaFormsLogoSrc = "/tesla-forms-logo.jpg";
+  // Use VIN FORMS logo from public folder, fallback to default logo
+  const vinFormsLogoSrc = "/vin-forms-logo.jpg";
   return (
     <img
       className={cn("transition-all duration-500", {
         "size-8": !isScrolled,
         "size-7": isScrolled,
       })}
-      src={teslaFormsLogoSrc}
-      alt="TESLA FORMS"
+      src={vinFormsLogoSrc}
+      alt="VIN FORMS"
       onError={(e) => {
-        // Fallback to default logo if TESLA FORMS logo fails to load
+        // Fallback to default logo if VIN FORMS logo fails to load
         (e.target as HTMLImageElement).src = logo;
       }}
     />

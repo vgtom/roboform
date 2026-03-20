@@ -8,7 +8,7 @@ interface PricingModalProps {
 
 const modalSubtitle = (
   <span>
-    Upgrade your plan to unlock more features and get the most out of TeslaForms.
+    Upgrade your plan to unlock more features and get the most out of VinForms.
   </span>
 );
 
