@@ -2,11 +2,13 @@ import { type Prisma } from "@prisma/client";
 import { type User } from "wasp/entities";
 import { HttpError, prisma } from "wasp/server";
 import {
+  type GetAiUsageCalendarStatus,
   type GetPaginatedUsers,
   type UpdateIsUserAdminById,
 } from "wasp/server/operations";
 import * as z from "zod";
-import { SubscriptionStatus } from "../payment/plans";
+import { ensureAiUsageBillingPeriodAligned } from "../ai/aiUsageBillingPeriod";
+import { AI_USAGE_LIMITS, PaymentPlanId, SubscriptionStatus } from "../payment/plans";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 
 const updateUserAdminByIdInputSchema = z.object({
@@ -155,5 +157,41 @@ export const getPaginatedUsers: GetPaginatedUsers<
   return {
     users: pageOfUsers,
     totalPages,
+  };
+};
+
+export const getAiUsageCalendarStatus: GetAiUsageCalendarStatus<
+  void,
+  {
+    enabled: boolean;
+    used: number;
+    limit: number;
+    /** ISO end of current prepaid period (Lemon renews_at / ends_at); null if unknown */
+    billingPeriodEndsAt: string | null;
+  }
+> = async (_args, context) => {
+  if (!context.user) {
+    throw new HttpError(401, "Authentication required");
+  }
+  await ensureAiUsageBillingPeriodAligned(context.user.id, prisma);
+  const user = await prisma.user.findUnique({
+    where: { id: context.user.id },
+    select: {
+      subscriptionPlan: true,
+      aiUsageCount: true,
+      aiUsagePeriodEndsAt: true,
+    },
+  });
+  if (!user) {
+    throw new HttpError(404, "User not found");
+  }
+  const plan =
+    (user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  const cfg = AI_USAGE_LIMITS[plan];
+  return {
+    enabled: cfg.enabled,
+    used: user.aiUsageCount,
+    limit: cfg.enabled ? cfg.interactionLimit : 0,
+    billingPeriodEndsAt: user.aiUsagePeriodEndsAt?.toISOString() ?? null,
   };
 };

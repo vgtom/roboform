@@ -15,6 +15,7 @@ import { UserDropdown } from "../../../user/UserDropdown";
 import { UserMenuItems } from "../../../user/UserMenuItems";
 import { useIsLandingPage } from "../../hooks/useIsLandingPage";
 import logo from "../../static/logo.webp";
+import vinFormsLogo from "../../static/vin-forms-logo.jpg";
 import { cn } from "../../utils";
 import DarkModeSwitcher from "../DarkModeSwitcher";
 
@@ -142,7 +143,11 @@ function NavBarDesktopUserDropdown({ isScrolled }: { isScrolled: boolean }) {
       <ul className="flex items-center justify-center gap-2 sm:gap-4">
         <DarkModeSwitcher />
       </ul>
-      {isUserLoading ? null : !user ? (
+      {!isUserLoading && user ? (
+        <div className="ml-3">
+          <UserDropdown user={user} />
+        </div>
+      ) : !user ? (
         <>
           <WaspRouterLink
             to={routes.LoginRoute.to}
@@ -180,11 +185,7 @@ function NavBarDesktopUserDropdown({ isScrolled }: { isScrolled: boolean }) {
             </div>
           </WaspRouterLink>
         </>
-      ) : (
-        <div className="ml-3">
-          <UserDropdown user={user} />
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -258,7 +259,14 @@ function NavBarMobileMenu({
                 {renderNavigationItems(navigationItems, setMobileMenuOpen)}
               </ul>
               <div className="py-6">
-                {isUserLoading ? null : !user ? (
+                {!isUserLoading && user ? (
+                  <ul className="space-y-2">
+                    <UserMenuItems
+                      user={user}
+                      onItemClick={() => setMobileMenuOpen(false)}
+                    />
+                  </ul>
+                ) : !user ? (
                   <div className="space-y-2">
                     <WaspRouterLink to={routes.LoginRoute.to}>
                       <div className="text-foreground hover:text-primary flex items-center justify-end transition-colors duration-300 ease-in-out">
@@ -271,14 +279,7 @@ function NavBarMobileMenu({
                       </div>
                     </WaspRouterLink>
                   </div>
-                ) : (
-                  <ul className="space-y-2">
-                    <UserMenuItems
-                      user={user}
-                      onItemClick={() => setMobileMenuOpen(false)}
-                    />
-                  </ul>
-                )}
+                ) : null}
               </div>
               <div className="py-6">
                 <DarkModeSwitcher />
@@ -336,20 +337,14 @@ function renderNavigationItems(
 }
 
 const NavLogo = ({ isScrolled }: { isScrolled: boolean }) => {
-  // Use VIN FORMS logo from public folder, fallback to default logo
-  const vinFormsLogoSrc = "/vin-forms-logo.jpg";
   return (
     <img
       className={cn("transition-all duration-500", {
         "size-8": !isScrolled,
         "size-7": isScrolled,
       })}
-      src={vinFormsLogoSrc}
+      src={vinFormsLogo}
       alt="VIN FORMS"
-      onError={(e) => {
-        // Fallback to default logo if VIN FORMS logo fails to load
-        (e.target as HTMLImageElement).src = logo;
-      }}
     />
   );
 };

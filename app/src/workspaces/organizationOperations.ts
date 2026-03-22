@@ -5,6 +5,7 @@ import type {
   InviteOrganizationMember,
 } from "wasp/server/operations";
 import * as z from "zod";
+import { ensureAiUsageBillingPeriodAligned } from "../ai/aiUsageBillingPeriod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { generateSlug } from "../shared/utils";
 import { OrganizationRole } from "@prisma/client";
@@ -22,6 +23,8 @@ export const getUserOrganizations: GetUserOrganizations<
   if (!context.user) {
     throw new HttpError(401, "Authentication required");
   }
+
+  await ensureAiUsageBillingPeriodAligned(context.user.id, prisma);
 
   let members = await prisma.organizationMember.findMany({
     where: { userId: context.user.id },

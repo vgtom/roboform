@@ -10,6 +10,9 @@ export async function parseWebhookPayload(rawPayload: string) {
       case "order_created":
         const orderData = await orderDataSchema.parseAsync(data);
         return { eventName: meta.event_name, meta, data: orderData };
+      case "subscription_payment_success":
+        const invoiceData = await subscriptionInvoiceDataSchema.parseAsync(data);
+        return { eventName: meta.event_name, meta, data: invoiceData };
       case "subscription_created":
       case "subscription_updated":
       case "subscription_cancelled":
@@ -24,15 +27,18 @@ export async function parseWebhookPayload(rawPayload: string) {
     if (e instanceof UnhandledWebhookEventError) {
       throw e;
     } else {
-      console.error(e);
+      if (e instanceof z.ZodError) {
+        console.error(
+          "[Lemon webhook] Payload validation failed:",
+          JSON.stringify(e.flatten()),
+        );
+      } else {
+        console.error(e);
+      }
       throw new HttpError(400, "Error parsing Lemon Squeezy webhook payload");
     }
   }
 }
-
-export type SubscriptionData = z.infer<typeof subscriptionDataSchema>;
-
-export type OrderData = z.infer<typeof orderDataSchema>;
 
 /**
  * This schema is based on LemonSqueezyResponse type
@@ -40,9 +46,12 @@ export type OrderData = z.infer<typeof orderDataSchema>;
 const genericEventSchema = z.object({
   meta: z.object({
     event_name: z.string(),
-    custom_data: z.object({
-      user_id: z.string(),
-    }),
+    /** Set from checkout; some events (e.g. invoice) may omit — resolve user via customer_id. */
+    custom_data: z
+      .object({
+        user_id: z.string(),
+      })
+      .optional(),
   }),
   data: z.unknown(),
 });
@@ -54,12 +63,12 @@ const genericEventSchema = z.object({
  */
 const orderDataSchema = z.object({
   attributes: z.object({
-    customer_id: z.number(),
+    customer_id: z.coerce.number(),
     status: z.string(),
     first_order_item: z.object({
-      variant_id: z.number(),
+      variant_id: z.coerce.number(),
     }),
-    order_number: z.number(),
+    order_number: z.coerce.number(),
   }),
 });
 
@@ -69,9 +78,31 @@ const orderDataSchema = z.object({
  * specifically Subscription['data'].
  */
 const subscriptionDataSchema = z.object({
+  id: z.coerce.string(),
   attributes: z.object({
-    customer_id: z.number(),
+    customer_id: z.coerce.number(),
     status: z.string(),
-    variant_id: z.number(),
+    variant_id: z.coerce.number(),
+    renews_at: z.string().optional(),
+    ends_at: z.string().nullable().optional(),
   }),
 });
+
+/** Subscription invoice (subscription_payment_success webhook). */
+const subscriptionInvoiceDataSchema = z.object({
+  attributes: z.object({
+    customer_id: z.coerce.number(),
+    subscription_id: z.coerce.number(),
+    /** initial | renewal | updated */
+    billing_reason: z.string(),
+    status: z.string(),
+  }),
+});
+
+export type SubscriptionData = z.infer<typeof subscriptionDataSchema>;
+
+export type OrderData = z.infer<typeof orderDataSchema>;
+
+export type SubscriptionInvoiceData = z.infer<
+  typeof subscriptionInvoiceDataSchema
+>;

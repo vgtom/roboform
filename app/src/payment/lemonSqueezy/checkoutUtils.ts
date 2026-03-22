@@ -1,4 +1,5 @@
 import { createCheckout } from "@lemonsqueezy/lemonsqueezy.js";
+import { requireNodeEnvVar } from "../../server/utils";
 
 interface LemonSqueezyCheckoutSessionParams {
   storeId: string;
@@ -13,7 +14,13 @@ export async function createLemonSqueezyCheckoutSession({
   userEmail,
   userId,
 }: LemonSqueezyCheckoutSessionParams) {
+  const clientUrl = requireNodeEnvVar("WASP_WEB_CLIENT_URL").replace(/\/$/, "");
+  const redirectUrl = `${clientUrl}/workspaces?payment=success`;
+
   const { data: session, error } = await createCheckout(storeId, variantId, {
+    productOptions: {
+      redirectUrl,
+    },
     checkoutData: {
       email: userEmail,
       custom: {

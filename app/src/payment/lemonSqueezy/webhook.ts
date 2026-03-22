@@ -4,15 +4,22 @@ import crypto from "crypto";
 import express from "express";
 import { HttpError, type MiddlewareConfigFn } from "wasp/server";
 import { type PaymentsWebhook } from "wasp/server/api";
+import {
+  applyRenewalInvoiceToAiUsage,
+  computeAiUsagePeriodEndsAtFromLemonAttributes,
+  fetchPeriodEndFromLemonApi,
+} from "../../ai/aiUsageBillingPeriod";
 import { requireNodeEnvVar } from "../../server/utils";
 import { assertUnreachable } from "../../shared/utils";
 import { UnhandledWebhookEventError } from "../errors";
-import { PaymentPlanId, paymentPlans, SubscriptionStatus } from "../plans";
-import { updateUserLemonSqueezyPaymentDetails } from "./paymentDetails";
+import { SubscriptionStatus } from "../plans";
+import { resetUserToFreePlan, updateUserLemonSqueezyPaymentDetails } from "./paymentDetails";
+import { getPlanIdByVariantId } from "./variantPlanMapping";
 import {
   parseWebhookPayload,
   type OrderData,
   type SubscriptionData,
+  type SubscriptionInvoiceData,
 } from "./webhookPayload";
 
 export const lemonSqueezyWebhook: PaymentsWebhook = async (
@@ -24,12 +31,19 @@ export const lemonSqueezyWebhook: PaymentsWebhook = async (
     const rawRequestBody = parseRequestBody(request);
 
     const { eventName, meta, data } = await parseWebhookPayload(rawRequestBody);
-    const userId = meta.custom_data.user_id;
     const prismaUserDelegate = context.entities.User;
+    const userId = await resolveWebhookUserId(meta, data, prismaUserDelegate);
 
     switch (eventName) {
       case "order_created":
         await handleOrderCreated(data, userId, prismaUserDelegate);
+        break;
+      case "subscription_payment_success":
+        await handleSubscriptionPaymentSuccess(
+          data as SubscriptionInvoiceData,
+          userId,
+          prismaUserDelegate,
+        );
         break;
       case "subscription_created":
         await handleSubscriptionCreated(data, userId, prismaUserDelegate);
@@ -97,6 +111,102 @@ export const lemonSqueezyMiddlewareConfigFn: MiddlewareConfigFn = (
   return middlewareConfig;
 };
 
+async function resolveWebhookUserId(
+  meta: { custom_data?: { user_id: string } },
+  data: OrderData | SubscriptionData | SubscriptionInvoiceData,
+  prismaUserDelegate: PrismaClient["user"],
+): Promise<string> {
+  if (meta.custom_data?.user_id) {
+    return meta.custom_data.user_id;
+  }
+  const customerId = data.attributes.customer_id;
+  const user = await prismaUserDelegate.findFirst({
+    where: { paymentProcessorUserId: String(customerId) },
+    select: { id: true },
+  });
+  if (user) {
+    return user.id;
+  }
+
+  /**
+   * Lemon often delivers `subscription_*` before `order_created`, so we have no
+   * `paymentProcessorUserId` yet and `meta.custom_data` may be missing on some events.
+   * Resolve the app user via the customer's email from Lemon's API.
+   */
+  const { data: lemonCustomer, error: customerErr } = await getCustomer(
+    String(customerId),
+  );
+  if (customerErr || !lemonCustomer?.data?.attributes?.email) {
+    throw new HttpError(
+      404,
+      `No user with Lemon customer_id ${customerId} and could not load customer from Lemon API. Ensure webhooks hit the server and LEMONSQUEEZY_API_KEY matches the store (live vs test).`,
+    );
+  }
+  const email = lemonCustomer.data.attributes.email.trim().toLowerCase();
+  const userByEmail = await prismaUserDelegate.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (!userByEmail) {
+    throw new HttpError(
+      404,
+      `No app user with email "${email}" for Lemon customer_id ${customerId}. User must sign up with the same email used at checkout.`,
+    );
+  }
+  console.log(
+    `[Lemon webhook] Resolved user ${userByEmail.id} by customer ${customerId} email (custom_data / paymentProcessorUserId not ready yet).`,
+  );
+  return userByEmail.id;
+}
+
+async function periodEndFromSubscriptionPayload(
+  data: SubscriptionData,
+): Promise<Date | null> {
+  const { status, renews_at, ends_at } = data.attributes;
+  if (renews_at) {
+    return computeAiUsagePeriodEndsAtFromLemonAttributes({
+      status,
+      renews_at,
+      ends_at: ends_at ?? null,
+    });
+  }
+  return fetchPeriodEndFromLemonApi(data.id);
+}
+
+/** Sync AI billing period from Lemon; renewals reset usage + next period end. */
+async function handleSubscriptionPaymentSuccess(
+  data: SubscriptionInvoiceData,
+  userId: string,
+  prismaUserDelegate: PrismaClient["user"],
+) {
+  const { billing_reason, status, customer_id, subscription_id } =
+    data.attributes;
+  if (status !== "paid") {
+    console.log(
+      `subscription_payment_success: invoice not paid (${status}), skipping`,
+    );
+    return;
+  }
+  const subId = String(subscription_id);
+  if (billing_reason === "renewal") {
+    await applyRenewalInvoiceToAiUsage(userId, subId, prismaUserDelegate);
+  } else if (billing_reason === "initial") {
+    const end = await fetchPeriodEndFromLemonApi(subId);
+    if (end) {
+      await prismaUserDelegate.update({
+        where: { id: userId },
+        data: {
+          lemonSubscriptionId: subId,
+          aiUsagePeriodEndsAt: end,
+        },
+      });
+    }
+  }
+  console.log(
+    `subscription_payment_success: billing_reason=${billing_reason}, customer=${customer_id}, subscription=${subId}, user=${userId}`,
+  );
+}
+
 // This will fire for one-time payment orders AND subscriptions. But subscriptions will ALSO send a follow-up
 // event of 'subscription_created'. So we use this handler mainly to process one-time, credit-based orders,
 // as well as to save the customer portal URL and customer id for the user.
@@ -109,12 +219,20 @@ async function handleOrderCreated(
     data.attributes;
   const lemonSqueezyId = customer_id.toString();
 
-  const planId = getPlanIdByVariantId(first_order_item.variant_id.toString());
-  const plan = paymentPlans[planId];
+  getPlanIdByVariantId(first_order_item.variant_id.toString());
 
-  const lemonSqueezyCustomerPortalUrl = await fetchUserCustomerPortalUrl({
-    lemonSqueezyId,
-  });
+  let lemonSqueezyCustomerPortalUrl: string | undefined;
+  try {
+    lemonSqueezyCustomerPortalUrl = await fetchUserCustomerPortalUrl({
+      lemonSqueezyId,
+    });
+  } catch (e) {
+    // Portal URL can be null briefly for new customers; do not fail the whole webhook.
+    console.warn(
+      `[Lemon webhook] order_created ${order_number}: customer portal URL not available yet:`,
+      e,
+    );
+  }
 
   // All plans are now subscriptions (no credits plan)
   // Only update customer portal URL and lemonSqueezyId for orders
@@ -141,7 +259,8 @@ async function handleSubscriptionCreated(
 
   const planId = getPlanIdByVariantId(variant_id.toString());
 
-  if (status === "active") {
+  if (status === "active" || status === "on_trial") {
+    const periodEnd = await periodEndFromSubscriptionPayload(data);
     await updateUserLemonSqueezyPaymentDetails(
       {
         lemonSqueezyId,
@@ -149,6 +268,9 @@ async function handleSubscriptionCreated(
         subscriptionPlan: planId,
         subscriptionStatus: status as SubscriptionStatus,
         datePaid: new Date(),
+        aiUsageCount: 0,
+        lemonSubscriptionId: data.id,
+        aiUsagePeriodEndsAt: periodEnd ?? undefined,
       },
       prismaUserDelegate,
     );
@@ -172,19 +294,52 @@ async function handleSubscriptionUpdated(
 
   const planId = getPlanIdByVariantId(variant_id.toString());
 
-  // We ignore other statuses like 'paused' and 'unpaid' for now, because we block user usage if their status is NOT active.
-  // Note that a status changes to 'past_due' on a failed payment retry, then after 4 unsuccesful payment retries status
-  // becomes 'unpaid' and finally 'expired' (i.e. 'deleted').
+  // Past due / active: keep plan and sync status. Unpaid / expired: downgrade to Free and reset AI (billing period ended without renewal).
+  // Note: 'cancelled' here may mean cancelled at period end — subscription_cancelled handler sets cancel_at_period_end; do not downgrade until unpaid/expired/expired webhook.
   // NOTE: ability to pause or trial a subscription is something that has to be additionally configured in the lemon squeezy dashboard.
-  // If you do enable these features, make sure to handle these statuses here.
-  if (status === "past_due" || status === "active") {
+  if (status === "unpaid" || status === "expired") {
+    await resetUserToFreePlan(userId, prismaUserDelegate);
+    console.log(
+      `Subscription ended (${status}) for user ${lemonSqueezyId}; reset to Free plan`,
+    );
+    return;
+  }
+
+  if (status === "cancelled") {
+    const periodEnd = await periodEndFromSubscriptionPayload(data);
+    await updateUserLemonSqueezyPaymentDetails(
+      {
+        lemonSqueezyId,
+        userId,
+        subscriptionPlan: planId,
+        subscriptionStatus: "cancel_at_period_end" as SubscriptionStatus,
+        lemonSubscriptionId: data.id,
+        aiUsagePeriodEndsAt: periodEnd ?? undefined,
+      },
+      prismaUserDelegate,
+    );
+    console.log(`Subscription cancelled (updated) for user ${lemonSqueezyId}`);
+    return;
+  }
+
+  if (
+    status === "past_due" ||
+    status === "active" ||
+    status === "on_trial" ||
+    status === "paused"
+  ) {
+    const periodEnd = await periodEndFromSubscriptionPayload(data);
     await updateUserLemonSqueezyPaymentDetails(
       {
         lemonSqueezyId,
         userId,
         subscriptionPlan: planId,
         subscriptionStatus: status as SubscriptionStatus,
-        ...(status === "active" && { datePaid: new Date() }),
+        lemonSubscriptionId: data.id,
+        aiUsagePeriodEndsAt: periodEnd ?? undefined,
+        ...((status === "active" || status === "on_trial") && {
+          datePaid: new Date(),
+        }),
       },
       prismaUserDelegate,
     );
@@ -197,15 +352,19 @@ async function handleSubscriptionCancelled(
   userId: string,
   prismaUserDelegate: PrismaClient["user"],
 ) {
-  const { customer_id } = data.attributes;
+  const { customer_id, variant_id } = data.attributes;
   const lemonSqueezyId = customer_id.toString();
+  const planId = getPlanIdByVariantId(variant_id.toString());
+  const periodEnd = await periodEndFromSubscriptionPayload(data);
 
   await updateUserLemonSqueezyPaymentDetails(
     {
       lemonSqueezyId,
       userId,
-      // cancel_at_period_end is the Stripe equivalent of LemonSqueezy's cancelled
+      subscriptionPlan: planId,
       subscriptionStatus: "cancel_at_period_end" as SubscriptionStatus,
+      lemonSubscriptionId: data.id,
+      aiUsagePeriodEndsAt: periodEnd ?? undefined,
     },
     prismaUserDelegate,
   );
@@ -221,17 +380,11 @@ async function handleSubscriptionExpired(
   const { customer_id } = data.attributes;
   const lemonSqueezyId = customer_id.toString();
 
-  await updateUserLemonSqueezyPaymentDetails(
-    {
-      lemonSqueezyId,
-      userId,
-      // deleted is the Stripe equivalent of LemonSqueezy's expired
-      subscriptionStatus: SubscriptionStatus.Deleted,
-    },
-    prismaUserDelegate,
-  );
+  await resetUserToFreePlan(userId, prismaUserDelegate);
 
-  console.log(`Subscription expired for user ${lemonSqueezyId}`);
+  console.log(
+    `Subscription expired for user ${lemonSqueezyId}; reset to Free plan`,
+  );
 }
 
 async function fetchUserCustomerPortalUrl({
@@ -254,14 +407,4 @@ async function fetchUserCustomerPortalUrl({
     );
   }
   return customerPortalUrl;
-}
-
-function getPlanIdByVariantId(variantId: string): PaymentPlanId {
-  const planId = Object.values(PaymentPlanId).find(
-    (planId) => paymentPlans[planId].getPaymentProcessorPlanId() === variantId,
-  );
-  if (!planId) {
-    throw new Error(`No plan with LemonSqueezy variant id ${variantId}`);
-  }
-  return planId;
 }

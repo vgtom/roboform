@@ -53,11 +53,11 @@ export function prettyPaymentPlanName(planId: PaymentPlanId): string {
   return planToName[planId];
 }
 
-// AI usage limits for each plan (based on request count)
+// AI usage limits per subscription billing period for Starter/Pro (Lemon renews_at; see aiUsageBillingPeriod.ts).
 export const AI_USAGE_LIMITS = {
-  [PaymentPlanId.Free]: { enabled: false, requestLimit: 0 }, // No AI features
-  [PaymentPlanId.Starter]: { enabled: true, requestLimit: 150 }, // 150 AI prompt requests/modifications
-  [PaymentPlanId.Pro]: { enabled: true, requestLimit: 2500 }, // 2500 AI prompt requests/modifications
+  [PaymentPlanId.Free]: { enabled: false, interactionLimit: 0 }, // No AI features
+  [PaymentPlanId.Starter]: { enabled: true, interactionLimit: 150 }, // 150 AI interactions per period
+  [PaymentPlanId.Pro]: { enabled: true, interactionLimit: 2500 }, // 2500 AI interactions per period
 } as const;
 
 // Credits limits for free plan

@@ -4,8 +4,13 @@ import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
-import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
+import { PaymentPlanId } from "../payment/plans";
+import {
+  assertAiPipelineAllowed,
+  assertRoomForSecondAiStep,
+} from "./aiUsageBillingPeriod";
 import { evaluatePromptIsFormRelated } from "./promptEvaluation";
+import { parseJsonFromAiContent } from "./parseAiJson";
 
 const generateFormWithAISchema = z.object({
   prompt: z.string().min(10).max(400), // 400 character limit
@@ -26,33 +31,13 @@ export const generateFormWithAI: GenerateFormWithAI<
   );
 
   const userPlan = (context.user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
-  const aiLimit = AI_USAGE_LIMITS[userPlan];
-  
-  // Check if AI features are enabled for this plan
-  if (!aiLimit.enabled) {
-    throw new HttpError(403, "AI features are not available on the Free plan. Please upgrade to Starter or Pro to use AI features.");
-  }
-  
-  // Check AI usage count limit
-  const user = await prisma.user.findUnique({
-    where: { id: context.user.id },
-    select: { aiUsageCount: true },
-  });
 
-  if (!user) {
-    throw new HttpError(404, "User not found");
-  }
-
-  // Check if user has reached their request limit
-  if (user.aiUsageCount >= aiLimit.requestLimit) {
-    const remaining = aiLimit.requestLimit - user.aiUsageCount;
-    throw new HttpError(403, `AI usage limit reached. You have used all ${aiLimit.requestLimit} requests. Please upgrade to Pro for more requests.`);
-  }
+  await assertAiPipelineAllowed(context.user.id, prisma);
 
   // Evaluate the prompt first
   const isFormRelated = await evaluatePromptIsFormRelated(prompt);
   
-  // Increment usage count for evaluation (1 request)
+  // Increment usage count for evaluation (1 interaction)
   await prisma.user.update({
     where: { id: context.user.id },
     data: { aiUsageCount: { increment: 1 } },
@@ -60,13 +45,15 @@ export const generateFormWithAI: GenerateFormWithAI<
 
   // If evaluation fails, throw error (1 usage already deducted)
   if (!isFormRelated) {
-    throw new HttpError(400, "Your prompt is not related to form building. Please provide a prompt about creating forms. 1 request has been deducted.");
+    throw new HttpError(400, "Your prompt is not related to form building. Please provide a prompt about creating forms. 1 interaction has been deducted.");
   }
+
+  await assertRoomForSecondAiStep(context.user.id, prisma);
 
   try {
     const formSchema = await callAIFormGenerator(prompt, userPlan === PaymentPlanId.Starter);
     
-    // Increment usage count for successful generation (1 more request)
+    // Increment usage count for successful generation (1 more interaction)
     await prisma.user.update({
       where: { id: context.user.id },
       data: { aiUsageCount: { increment: 1 } },
@@ -86,8 +73,9 @@ async function callAIFormGenerator(prompt: string, useMinimalTokens: boolean = f
 
   // For Starter plan, use a shorter system prompt to minimize tokens
   const systemPrompt = useMinimalTokens
-    ? `Generate form JSON. Return: {"title":"...","description":"...","fields":[{"id":"...","type":"...","label":"..."}]}`
+    ? `You output JSON only. Build a form schema: title, description, fields (each field: id, type, label, options if select/radio). Use radio or select with options for quizzes. No markdown, no commentary — JSON object only.`
     : `You are a form builder assistant. Generate a JSON form schema based on user prompts.
+You must respond with a single JSON object (no markdown fences, no extra text).
 
 Return ONLY valid JSON matching this structure:
 {
@@ -130,10 +118,15 @@ Generate appropriate fields based on the user's request.`;
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: useMinimalTokens ? prompt.substring(0, 100) : prompt }, // Limit prompt length for Starter
+          {
+            role: "user",
+            content: useMinimalTokens ? prompt.substring(0, 400) : prompt,
+          },
         ],
         temperature: 0.7,
-        max_tokens: useMinimalTokens ? 500 : 2000, // Lower token limit for Starter plan
+        // Quizzes / many fields need a large completion budget; 500 tokens often truncated mid-JSON.
+        max_tokens: useMinimalTokens ? 3000 : 4000,
+        response_format: { type: "json_object" },
       }),
     });
 
@@ -143,25 +136,37 @@ Generate appropriate fields based on the user's request.`;
     }
 
     const data = await response.json();
-    const content = data.choices[0]?.message?.content;
+    const choice = data.choices[0];
+    const content = choice?.message?.content;
 
     if (!content) {
       throw new Error("No content from AI");
     }
 
-    let jsonContent = content.trim();
-    if (jsonContent.startsWith("```json")) {
-      jsonContent = jsonContent.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-    } else if (jsonContent.startsWith("```")) {
-      jsonContent = jsonContent.replace(/```\n?/g, "");
+    if (choice?.finish_reason === "length") {
+      throw new HttpError(
+        500,
+        "AI response was cut off (too many fields). Try a shorter prompt (e.g. fewer questions) or contact support.",
+      );
     }
 
-    const parsed = JSON.parse(jsonContent);
+    let parsed: unknown;
+    try {
+      parsed = parseJsonFromAiContent(content);
+    } catch (e) {
+      const hint =
+        e instanceof Error ? e.message : "Invalid JSON";
+      throw new HttpError(
+        500,
+        `Failed to parse AI response as JSON (${hint}). Try simplifying your prompt.`,
+      );
+    }
     
+    const obj = parsed as Record<string, unknown>;
     const formSchema: FormSchema = {
-      title: parsed.title || "Untitled Form",
-      description: parsed.description || "",
-      fields: (parsed.fields || []).map((field: any) => ({
+      title: (typeof obj.title === "string" ? obj.title : null) || "Untitled Form",
+      description: (typeof obj.description === "string" ? obj.description : "") || "",
+      fields: (Array.isArray(obj.fields) ? obj.fields : []).map((field: any) => ({
         id: field.id || generateId(),
         type: field.type || "text",
         label: field.label || "Untitled Field",
@@ -174,7 +179,10 @@ Generate appropriate fields based on the user's request.`;
     return formSchema;
   } catch (error: any) {
     if (error instanceof SyntaxError) {
-      throw new HttpError(500, "Failed to parse AI response as JSON");
+      throw new HttpError(
+        500,
+        "Failed to parse AI response as JSON. Try a simpler or shorter prompt.",
+      );
     }
     throw error;
   }

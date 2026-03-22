@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "wasp/client/operations";
 import {
   getUserOrganizations,
@@ -7,9 +7,11 @@ import {
   getWorkspaces,
   createWorkspace,
   getAllForms,
+  getAiUsageCalendarStatus,
+  syncSubscriptionFromLemon,
 } from "wasp/client/operations";
 import { useAuth } from "wasp/client/auth";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../client/components/ui/button";
 import {
   Card,
@@ -70,7 +72,9 @@ import { cn } from "../client/utils";
 import { PricingModal } from "../payment/PricingModal";
 
 export default function WorkspacesPage() {
-  const { data: user } = useAuth();
+  const { data: user, refetch: refetchUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paymentSuccessSyncStarted = useRef(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
@@ -91,6 +95,62 @@ export default function WorkspacesPage() {
     getUserOrganizations,
     {},
   );
+
+  const { data: aiUsageStatus, refetch: refetchAiUsage } = useQuery(
+    getAiUsageCalendarStatus,
+  );
+
+  useEffect(() => {
+    if (searchParams.get("payment") !== "success") {
+      paymentSuccessSyncStarted.current = false;
+      return;
+    }
+    if (paymentSuccessSyncStarted.current) return;
+    paymentSuccessSyncStarted.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await syncSubscriptionFromLemon();
+        await refetchUser();
+        await refetchAiUsage();
+        if (!cancelled) {
+          toast({
+            title: result.synced ? "Subscription updated" : "Billing status",
+            description: result.message,
+          });
+        }
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("payment");
+            return next;
+          },
+          { replace: true },
+        );
+      } catch (e) {
+        paymentSuccessSyncStarted.current = false;
+        if (!cancelled) {
+          toast({
+            variant: "destructive",
+            title: "Could not sync subscription",
+            description:
+              e instanceof Error ? e.message : "Try again in a moment.",
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    searchParams,
+    setSearchParams,
+    refetchUser,
+    refetchAiUsage,
+    toast,
+  ]);
 
   useEffect(() => {
     if (organizations && organizations.length > 0 && !selectedOrgId) {
@@ -119,8 +179,17 @@ export default function WorkspacesPage() {
   const selectedWorkspace = workspaces?.find((w) => w.id === selectedWorkspaceId);
   const userPlan = (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
   const aiLimit = AI_USAGE_LIMITS[userPlan];
-  const aiUsageCount = user?.aiUsageCount || 0;
-  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCount >= aiLimit.requestLimit);
+  const aiUsageCount =
+    aiUsageStatus != null && aiUsageStatus.enabled
+      ? aiUsageStatus.used
+      : user?.aiUsageCount ?? 0;
+  const effectiveLimit =
+    aiUsageStatus != null && aiUsageStatus.enabled
+      ? aiUsageStatus.limit
+      : aiLimit.interactionLimit;
+  const isAIDisabled =
+    !aiLimit.enabled ||
+    (aiLimit.enabled && aiUsageCount >= effectiveLimit);
 
   // Filter forms by selected workspace if one is selected
   const displayedForms = useMemo(() => {
@@ -212,6 +281,7 @@ export default function WorkspacesPage() {
       });
 
       setAiPrompt("");
+      void refetchAiUsage();
       toast({
         title: "Form generated!",
         description: "Your form has been created with AI. You can edit it now.",
@@ -301,7 +371,7 @@ export default function WorkspacesPage() {
                           <p className="text-sm text-yellow-700">
                             {!aiLimit.enabled 
                               ? "AI features are not available on the Free plan. Upgrade to Starter or Pro to use AI features."
-                              : `You've reached your AI usage limit (${aiLimit.requestLimit} requests). Upgrade to Pro for more requests.`
+                              : `You've reached your AI limit for this billing period (${effectiveLimit} interactions). It resets when your subscription renews. Upgrade to Pro for more interactions.`
                             }
                           </p>
                         </div>
@@ -330,7 +400,7 @@ export default function WorkspacesPage() {
                         <div className="flex items-center justify-between mt-1">
                           {aiLimit.enabled && (
                             <p className="text-xs text-gray-500">
-                              {aiLimit.requestLimit - aiUsageCount} AI requests remaining ({aiLimit.requestLimit} request limit)
+                              {Math.max(0, effectiveLimit - aiUsageCount)} AI interactions remaining this period ({effectiveLimit} per billing period)
                             </p>
                           )}
                           <p className={cn(

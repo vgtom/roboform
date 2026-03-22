@@ -56,10 +56,25 @@ The Wasp CLI simplifies deployment to a single command.
     *   `fly-client.toml`
     *   **Commit these files** to your version control system (e.g., Git). They contain the deployment configuration and are needed for future updates.
 *   **Accessing Your App:** Once deployment is complete, the CLI will output the URLs for your deployed client and server. The client URL is your main application entry point.
-*   **Updating Your App:** To redeploy changes after committing the `.toml` files, you can simply run:
+*   **Updating Your App:** To redeploy changes after committing the `.toml` files, from the `app/` directory run:
     ```bash
-    wasp deploy fly deploy
+    ./scripts/deploy-production.sh
     ```
+    That runs `wasp deploy fly deploy --fly-toml-dir "$(pwd)"` and then production DB migrations. Or run only:
+    ```bash
+    wasp deploy fly deploy --fly-toml-dir "$(pwd)"
+    ```
+*   **Client API URL (`REACT_APP_API_URL`):** The production build must know where the Wasp server lives. If users open the app on a custom domain (e.g. `https://vinforms.com`) while the API is still on Fly (e.g. `https://vinforms-app-server.fly.dev`), set this before deploying the client:
+    ```bash
+    cd app
+    cp .env.production.example .env.production   # edit URL if your server hostname differs
+    wasp deploy fly deploy --fly-toml-dir "$(pwd)"
+    ```
+    Or one-shot:
+    ```bash
+    REACT_APP_API_URL=https://YOUR-SERVER.fly.dev wasp deploy fly deploy --fly-toml-dir "$(pwd)"
+    ```
+    Without this, API calls from the browser may target the wrong host when using a custom domain.
 
 *   **Setting Environment Variables (Secrets):**
     *   If your application requires environment variables beyond the ones Wasp/Fly set automatically (like `DATABASE_URL`), such as API keys or third-party service credentials (e.g., `SENDGRID_API_KEY`, OAuth client secrets), you need to set them as secrets on Fly.io.
@@ -78,10 +93,29 @@ The Wasp CLI simplifies deployment to a single command.
         wasp deploy fly cmd --context server secrets list
         ```
     *   **Important:** Set these secrets *after* the initial `launch` command completes but *before* your application fully relies on them. If you add new variables later, you might need to redeploy the server for it to pick them up (`wasp deploy fly deploy`).
+    *   **Bulk import from a production env file** (excludes `DATABASE_URL` — Fly sets that for Postgres): from `app/`, put production-only `KEY=value` lines in a file (e.g. `.env.fly.server`), then run `./scripts/fly-import-secrets-from-env.sh .env.fly.server`. Redeploy the server afterward.
+
+*   **Production DB migrations:** Wasp’s server runs `prisma migrate deploy` on startup (`start-production`). To run migrations manually on Fly (e.g. verify or retry), use `sh -c` because `fly ssh console -C` does not run shell `cd` by itself:
+    ```bash
+    # From repo: app name must match fly-server.toml (e.g. vinforms-app-server)
+    flyctl ssh console -a vinforms-app-server -C "sh -c 'cd /app/.wasp/build/server && npm run db-migrate-prod'"
+    ```
+    Or: `./scripts/fly-migrate-production.sh` from the `app/` directory.
+
+*   **Listing server secrets:** Use Fly directly (avoids a full Wasp rebuild):
+    ```bash
+    flyctl secrets list -a vinforms-app-server
+    ```
 
 ## 4. Troubleshooting
 
 *   **Unique Name Error:** If deployment fails due to a non-unique name, choose a different `<your-app-name>` and run the `launch` command again.
 *   **Billing Error:** Ensure you have added valid billing information to your Fly.io account.
 *   **Build Failures:** Check the output logs from the `wasp deploy` command for any build errors in your Wasp project code. Fix the errors and attempt deployment again.
-*   **Check Fly.io Dashboard:** Monitor the status and logs of your applications (`<your-app-name>-client`, `<your-app-name>-server`, `<your-app-name>-db`) directly in the Fly.io dashboard. 
+*   **Check Fly.io Dashboard:** Monitor the status and logs of your applications (`<your-app-name>-client`, `<your-app-name>-server`, `<your-app-name>-db`) directly in the Fly.io dashboard.
+
+*   **Paid plan still “Free” after Lemon checkout:** Plan and AI limits are updated from **Lemon Squeezy webhooks** (`POST /payments-webhook` on the **server** URL). If webhooks never reach production or fail signature checks, the DB stays on Free. Fix:
+    *   In Lemon Squeezy → Settings → Webhooks, the URL must be `https://<YOUR-WASP-SERVER-HOST>/payments-webhook` (same host as `REACT_APP_API_URL` / Fly server), **HTTPS**, not the client-only domain.
+    *   `LEMONSQUEEZY_WEBHOOK_SECRET` on the Fly **server** must match the signing secret shown in Lemon.
+    *   Check Lemon’s webhook delivery log for HTTP 4xx/5xx; check Fly server logs for “Invalid signature” or webhook errors.
+    *   After checkout, users land on `/workspaces?payment=success`; the app runs a **sync from Lemon’s API** as a fallback when webhooks are slow or misconfigured—deploy the latest code so that path is active.

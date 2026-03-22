@@ -9,6 +9,7 @@ import {
   upsertFormIntegration,
   getFormAnalytics,
   getFormResponses,
+  getAiUsageCalendarStatus,
 } from "wasp/client/operations";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../client/components/ui/button";
@@ -106,6 +107,9 @@ export default function FormBuilderPage() {
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
 
   const { data: user } = useAuth();
+  const { data: aiUsageStatus, refetch: refetchAiUsage } = useQuery(
+    getAiUsageCalendarStatus,
+  );
   const { data: form, isLoading, refetch: refetchForm } = useQuery(
     getForm,
     formId ? { id: formId } : undefined,
@@ -115,8 +119,17 @@ export default function FormBuilderPage() {
   
   const userPlan = (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
   const aiLimit = AI_USAGE_LIMITS[userPlan];
-  const aiUsageCount = user?.aiUsageCount || 0;
-  const isAIDisabled = !aiLimit.enabled || (aiLimit.enabled && aiUsageCount >= aiLimit.requestLimit);
+  const aiUsageCount =
+    aiUsageStatus != null && aiUsageStatus.enabled
+      ? aiUsageStatus.used
+      : user?.aiUsageCount ?? 0;
+  const effectiveLimit =
+    aiUsageStatus != null && aiUsageStatus.enabled
+      ? aiUsageStatus.limit
+      : aiLimit.interactionLimit;
+  const isAIDisabled =
+    !aiLimit.enabled ||
+    (aiLimit.enabled && aiUsageCount >= effectiveLimit);
 
   useEffect(() => {
     if (form?.schemaJson) {
@@ -279,10 +292,10 @@ export default function FormBuilderPage() {
           variant: "destructive",
         });
       } else {
-        const remaining = aiLimit.requestLimit - aiUsageCount;
+        const remaining = Math.max(0, effectiveLimit - aiUsageCount);
         toast({
           title: "AI Usage Limit Reached",
-          description: `You've reached your AI usage limit (${aiLimit.requestLimit} requests). You have ${remaining} requests remaining. Please upgrade to Pro for more requests.`,
+          description: `You've reached your AI limit for this billing period (${effectiveLimit} interactions). It resets when your subscription renews. Please upgrade to Pro for more interactions.`,
           variant: "destructive",
         });
       }
@@ -325,11 +338,16 @@ export default function FormBuilderPage() {
       });
 
       setAiPrompt("");
-      // Note: User count will be updated on next page refresh/refetch
-      const remaining = Math.max(0, aiLimit.requestLimit - aiUsageCount - 2); // 2 requests: evaluation + generation
+      const ref = await refetchAiUsage();
+      const lim = ref.data?.limit ?? effectiveLimit;
+      const usedAfter = ref.data?.used;
+      const remaining =
+        usedAfter != null && ref.data?.enabled
+          ? Math.max(0, lim - usedAfter)
+          : 0;
       toast({
         title: "Form updated!",
-        description: `Your form has been modified with AI and saved successfully. ${remaining > 0 ? `(${remaining} requests remaining)` : ""}`,
+        description: `Your form has been modified with AI and saved successfully.${remaining > 0 ? ` (${remaining} interactions left this billing period)` : ""}`,
       });
     } catch (error: any) {
       if (error.message?.includes("AI features are disabled")) {
@@ -559,7 +577,7 @@ export default function FormBuilderPage() {
                         <p className="text-sm text-yellow-700">
                           {!aiLimit.enabled 
                             ? "AI features are not available on the Free plan. Upgrade to Starter or Pro to use AI features."
-                            : `You've reached your AI usage limit (${aiLimit.requestLimit} requests). Upgrade to Pro for more requests.`
+                            : `You've reached your monthly AI limit (${effectiveLimit} interactions per UTC calendar month). Upgrade to Pro for more interactions.`
                           }
                         </p>
                       </div>
@@ -588,7 +606,7 @@ export default function FormBuilderPage() {
                       <div className="flex items-center justify-between mt-1">
                         {aiLimit.enabled && (
                           <p className="text-xs text-gray-500">
-                            {aiLimit.requestLimit - aiUsageCount} AI requests remaining ({aiLimit.requestLimit} request limit)
+                            {Math.max(0, effectiveLimit - aiUsageCount)} AI interactions remaining this period ({effectiveLimit} per billing period)
                           </p>
                         )}
                         <p className={cn(

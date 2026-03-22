@@ -2,11 +2,13 @@ import { HttpError } from "wasp/server";
 import type {
   GenerateCheckoutSession,
   GetCustomerPortalUrl,
+  SyncSubscriptionFromLemon,
 } from "wasp/server/operations";
 import * as z from "zod";
 import { PaymentPlanId, paymentPlans } from "../payment/plans";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { paymentProcessor } from "./paymentProcessor";
+import { syncSubscriptionFromLemonForUser } from "./lemonSqueezy/syncSubscriptionFromLemon";
 
 export type CheckoutSession = {
   sessionUrl: string | null;
@@ -70,4 +72,22 @@ export const getCustomerPortalUrl: GetCustomerPortalUrl<
     userId: context.user.id,
     prismaUserDelegate: context.entities.User,
   });
+};
+
+export const syncSubscriptionFromLemon: SyncSubscriptionFromLemon<
+  void,
+  { synced: boolean; message: string }
+> = async (_args, context) => {
+  if (!context.user) {
+    throw new HttpError(
+      401,
+      "Only authenticated users are allowed to perform this operation",
+    );
+  }
+
+  return syncSubscriptionFromLemonForUser(
+    context.user.id,
+    context.user.email ?? null,
+    context.entities.User,
+  );
 };
