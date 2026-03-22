@@ -35,7 +35,7 @@ interface PaymentPlanCard {
 const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
   [PaymentPlanId.Free]: {
     name: prettyPaymentPlanName(PaymentPlanId.Free),
-    price: "$0",
+    price: "₹0",
     description: "Perfect for getting started",
     features: [
       "5 credits (5 forms)",
@@ -46,23 +46,23 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
   },
   [PaymentPlanId.Starter]: {
     name: prettyPaymentPlanName(PaymentPlanId.Starter),
-    price: "$7.99",
-    description: "AI features with 150 requests",
+    price: "₹799",
+    description: "AI features with 150 interactions",
     features: [
       "Everything in Free",
       "AI-powered form generation",
       "AI form modifications",
-      "150 AI requests included",
+      "150 AI interactions included",
     ],
   },
   [PaymentPlanId.Pro]: {
     name: prettyPaymentPlanName(PaymentPlanId.Pro),
-    price: "$39.99",
-    description: "Advanced AI features with 2500 requests",
+    price: "₹3,999",
+    description: "Advanced AI features with 2500 interactions",
     features: [
       "Everything in Starter",
       "Enhanced AI-powered features",
-      "2500 AI requests included",
+      "2500 AI interactions included",
       "Priority support",
     ],
   },
@@ -206,8 +206,9 @@ export function PricingContent({ subtitle = defaultSubtitle }: PricingContentPro
                   {paymentPlanCards[planId].price}
                 </span>
                 <span className="text-muted-foreground text-sm font-semibold leading-6">
-                  {paymentPlans[planId].effect.kind === "subscription" &&
-                    "/month"}
+                  {planId !== PaymentPlanId.Free &&
+                    paymentPlans[planId].effect.kind === "subscription" &&
+                    "/month (INR)"}
                 </span>
               </p>
               <ul

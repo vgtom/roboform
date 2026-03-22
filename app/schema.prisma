@@ -21,7 +21,11 @@ model User {
   subscriptionPlan          String?         // 'free', 'starter', 'pro'
   datePaid                  DateTime?
   credits                   Int             @default(5) // Free plan gets 5 credits
-  aiUsageCount               Int             @default(0) // Track AI request count (prompts/modifications)
+  aiUsageCount               Int             @default(0) // Track AI interaction count (prompts/modifications)
+  /// Lemon Squeezy subscription id (for billing-period AI quota)
+  lemonSubscriptionId        String?
+  /// End of current prepaid period (renews_at, or ends_at if cancelled) — AI count resets after this
+  aiUsagePeriodEndsAt        DateTime?
 
   gptResponses              GptResponse[]
   contactFormMessages       ContactFormMessage[]

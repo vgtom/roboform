@@ -4,8 +4,13 @@ import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormSchema } from "../shared/formTypes";
 import { generateId } from "../shared/utils";
-import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
+import { PaymentPlanId } from "../payment/plans";
+import {
+  assertAiPipelineAllowed,
+  assertRoomForSecondAiStep,
+} from "./aiUsageBillingPeriod";
 import { evaluatePromptIsFormRelated } from "./promptEvaluation";
+import { parseJsonFromAiContent } from "./parseAiJson";
 
 const modifyFormWithAISchema = z.object({
   currentSchema: z.any(), // The current form schema
@@ -26,33 +31,13 @@ export const modifyFormWithAI: ModifyFormWithAI<
   );
 
   const userPlan = (context.user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
-  const aiLimit = AI_USAGE_LIMITS[userPlan];
-  
-  // Check if AI features are enabled for this plan
-  if (!aiLimit.enabled) {
-    throw new HttpError(403, "AI features are not available on the Free plan. Please upgrade to Starter or Pro to use AI features.");
-  }
-  
-  // Check AI usage count limit
-  const user = await prisma.user.findUnique({
-    where: { id: context.user.id },
-    select: { aiUsageCount: true },
-  });
 
-  if (!user) {
-    throw new HttpError(404, "User not found");
-  }
-
-  // Check if user has reached their request limit
-  if (user.aiUsageCount >= aiLimit.requestLimit) {
-    const remaining = aiLimit.requestLimit - user.aiUsageCount;
-    throw new HttpError(403, `AI usage limit reached. You have used all ${aiLimit.requestLimit} requests. Please upgrade to Pro for more requests.`);
-  }
+  await assertAiPipelineAllowed(context.user.id, prisma);
 
   // Evaluate the prompt first
   const isFormRelated = await evaluatePromptIsFormRelated(modificationPrompt);
   
-  // Increment usage count for evaluation (1 request)
+  // Increment usage count for evaluation (1 interaction)
   await prisma.user.update({
     where: { id: context.user.id },
     data: { aiUsageCount: { increment: 1 } },
@@ -60,8 +45,10 @@ export const modifyFormWithAI: ModifyFormWithAI<
 
   // If evaluation fails, throw error (1 usage already deducted)
   if (!isFormRelated) {
-    throw new HttpError(400, "Your prompt is not related to form building or modification. Please provide a prompt about creating or modifying forms. 1 request has been deducted.");
+    throw new HttpError(400, "Your prompt is not related to form building or modification. Please provide a prompt about creating or modifying forms. 1 interaction has been deducted.");
   }
+
+  await assertRoomForSecondAiStep(context.user.id, prisma);
 
   try {
     const modifiedSchema = await callAIModifyForm(
@@ -70,7 +57,7 @@ export const modifyFormWithAI: ModifyFormWithAI<
       userPlan === PaymentPlanId.Starter // Use minimal tokens for Starter
     );
     
-    // Increment usage count for successful modification (1 more request)
+    // Increment usage count for successful modification (1 more interaction)
     await prisma.user.update({
       where: { id: context.user.id },
       data: { aiUsageCount: { increment: 1 } },
@@ -136,7 +123,8 @@ Field types:
 - date: Date picker
 - file: File upload
 
-Modify the form according to the user's request and return the complete modified schema.`;
+Modify the form according to the user's request and return the complete modified schema.
+You must respond with a single JSON object (no markdown fences, no extra text).`;
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -149,10 +137,14 @@ Modify the form according to the user's request and return the complete modified
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: useMinimalTokens ? modificationPrompt.substring(0, 100) : modificationPrompt }, // Limit prompt length for Starter
+          {
+            role: "user",
+            content: useMinimalTokens ? modificationPrompt.substring(0, 400) : modificationPrompt,
+          },
         ],
         temperature: 0.3, // Lower temperature for more consistent modifications
-        max_tokens: useMinimalTokens ? 500 : 3000, // Lower token limit for Starter plan
+        max_tokens: useMinimalTokens ? 3000 : 4000,
+        response_format: { type: "json_object" },
       }),
     });
 
@@ -162,25 +154,42 @@ Modify the form according to the user's request and return the complete modified
     }
 
     const data = await response.json();
-    const content = data.choices[0]?.message?.content;
+    const choice = data.choices[0];
+    const content = choice?.message?.content;
 
     if (!content) {
       throw new Error("No content from AI");
     }
 
-    let jsonContent = content.trim();
-    if (jsonContent.startsWith("```json")) {
-      jsonContent = jsonContent.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-    } else if (jsonContent.startsWith("```")) {
-      jsonContent = jsonContent.replace(/```\n?/g, "");
+    if (choice?.finish_reason === "length") {
+      throw new HttpError(
+        500,
+        "AI response was cut off (form too large). Try removing some fields or a shorter change request.",
+      );
     }
 
-    const parsed = JSON.parse(jsonContent);
-    
+    let parsed: unknown;
+    try {
+      parsed = parseJsonFromAiContent(content);
+    } catch (e) {
+      const hint = e instanceof Error ? e.message : "Invalid JSON";
+      throw new HttpError(
+        500,
+        `Failed to parse AI response as JSON (${hint}). Try simplifying your request.`,
+      );
+    }
+
+    const obj = parsed as Record<string, unknown>;
     const modifiedSchema: FormSchema = {
-      title: parsed.title || currentSchema.title || "Untitled Form",
-      description: parsed.description !== undefined ? parsed.description : currentSchema.description || "",
-      fields: (parsed.fields || []).map((field: any) => ({
+      title:
+        (typeof obj.title === "string" ? obj.title : null) ||
+        currentSchema.title ||
+        "Untitled Form",
+      description:
+        obj.description !== undefined && typeof obj.description === "string"
+          ? obj.description
+          : currentSchema.description || "",
+      fields: (Array.isArray(obj.fields) ? obj.fields : []).map((field: any) => ({
         id: field.id || generateId(),
         type: field.type || "text",
         label: field.label || "Untitled Field",
@@ -194,7 +203,10 @@ Modify the form according to the user's request and return the complete modified
     return modifiedSchema;
   } catch (error: any) {
     if (error instanceof SyntaxError) {
-      throw new HttpError(500, "Failed to parse AI response as JSON");
+      throw new HttpError(
+        500,
+        "Failed to parse AI response as JSON. Try a simpler request.",
+      );
     }
     throw error;
   }

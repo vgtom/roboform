@@ -9,17 +9,24 @@ export default function CheckoutResultPage() {
   const status = urlSearchParams.get("status");
 
   useEffect(() => {
-    const accountPageRedirectTimeoutId = setTimeout(() => {
-      navigate("/account");
+    const workspacesRedirectTimeoutId = setTimeout(() => {
+      // Must match checkout redirect so WorkspacesPage runs subscription sync from Lemon API.
+      const qs =
+        status === "success"
+          ? "?payment=success"
+          : status === "canceled"
+            ? "?payment=canceled"
+            : "";
+      navigate(`/workspaces${qs}`);
     }, ACCOUNT_PAGE_REDIRECT_DELAY_MS);
 
     return () => {
-      clearTimeout(accountPageRedirectTimeoutId);
+      clearTimeout(workspacesRedirectTimeoutId);
     };
-  }, []);
+  }, [navigate, status]);
 
   if (status !== "success" && status !== "canceled") {
-    return <Navigate to="/account" />;
+    return <Navigate to="/workspaces" />;
   }
 
   return (
@@ -30,7 +37,7 @@ export default function CheckoutResultPage() {
           {status === "canceled" && "😢 Payment Canceled."}
         </h1>
         <span className="">
-          You will be redirected to your account page in{" "}
+          You will be redirected to your workspaces in{" "}
           {ACCOUNT_PAGE_REDIRECT_DELAY_MS / 1000} seconds...
         </span>
       </div>

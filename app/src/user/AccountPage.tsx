@@ -1,4 +1,8 @@
-import { getCustomerPortalUrl, useQuery } from "wasp/client/operations";
+import {
+  getAiUsageCalendarStatus,
+  getCustomerPortalUrl,
+  useQuery,
+} from "wasp/client/operations";
 import { Link as WaspRouterLink, routes } from "wasp/client/router";
 import type { User } from "wasp/entities";
 import { Button } from "../client/components/ui/button";
@@ -14,6 +18,7 @@ import {
   SubscriptionStatus,
   parsePaymentPlanId,
   prettyPaymentPlanName,
+  AI_USAGE_LIMITS,
 } from "../payment/plans";
 
 export default function AccountPage({ user }: { user: User }) {
@@ -68,6 +73,8 @@ export default function AccountPage({ user }: { user: User }) {
               </div>
             </div>
             <Separator />
+            <AiUsageSection user={user} />
+            <Separator />
             <div className="px-6 py-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 sm:gap-4">
                 <div className="text-muted-foreground text-sm font-medium">
@@ -95,6 +102,60 @@ export default function AccountPage({ user }: { user: User }) {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function AiUsageSection({ user }: { user: User }) {
+  const { data: status } = useQuery(getAiUsageCalendarStatus);
+  const plan =
+    (user.subscriptionPlan as PaymentPlanId | null) || PaymentPlanId.Free;
+  const limit = AI_USAGE_LIMITS[plan];
+  const used =
+    status != null && status.enabled ? status.used : user.aiUsageCount ?? 0;
+  const cap =
+    status != null && status.enabled ? status.limit : limit.interactionLimit;
+
+  return (
+    <div className="px-6 py-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 sm:gap-4">
+        <div className="text-muted-foreground text-sm font-medium">
+          AI interactions
+        </div>
+        <div className="text-foreground mt-1 text-sm sm:col-span-2 sm:mt-0 space-y-1">
+          {!limit.enabled ? (
+            <p>
+              Not included on the Free plan. Upgrade to Starter or Pro to use AI
+              form generation and edits.
+            </p>
+          ) : (
+            <>
+              <p>
+                <span className="font-semibold tabular-nums">
+                  {Math.max(0, cap - used)}
+                </span>{" "}
+                remaining of{" "}
+                <span className="tabular-nums">{cap}</span>{" "}
+                per billing period ({used} used)
+              </p>
+              {status?.billingPeriodEndsAt && (
+                <p className="text-muted-foreground text-xs">
+                  Current billing period ends:{" "}
+                  {new Date(status.billingPeriodEndsAt).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </p>
+              )}
+              <p className="text-muted-foreground text-xs">
+                Quota resets when your subscription renews (same schedule as
+                Lemon Squeezy billing). Each AI action uses up to 2 interactions
+                (prompt check + generate or modify).
+              </p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

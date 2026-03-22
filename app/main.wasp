@@ -3,22 +3,22 @@ app OpenSaaS {
     version: "^0.20.0"
   },
 
-  title: "My Open SaaS App",
+  title: "VinForms",
 
   head: [
     "<link rel='icon' href='/favicon.ico' />",
     "<meta charset='utf-8' />",
-    "<meta name='description' content='Your apps main description and features.' />",
-    "<meta name='author' content='Your (App) Name' />",
-    "<meta name='keywords' content='saas, solution, product, app, service' />",
+    "<meta name='description' content='Build and share forms with AI — VinForms by TeslaForms.' />",
+    "<meta name='author' content='VinForms' />",
+    "<meta name='keywords' content='forms, surveys, ai, teslaforms, vinforms, saas' />",
 
     "<meta property='og:type' content='website' />",
-    "<meta property='og:title' content='Your Open SaaS App' />",
-    "<meta property='og:site_name' content='Your Open SaaS App' />",
-    "<meta property='og:url' content='https://your-saas-app.com' />",
-    "<meta property='og:description' content='Your apps main description and features.' />",
-    "<meta property='og:image' content='https://your-saas-app.com/public-banner.webp' />",
-    "<meta name='twitter:image' content='https://your-saas-app.com/public-banner.webp' />",
+    "<meta property='og:title' content='VinForms' />",
+    "<meta property='og:site_name' content='VinForms' />",
+    "<meta property='og:url' content='https://vinforms.com' />",
+    "<meta property='og:description' content='Build and share forms with AI — VinForms by TeslaForms.' />",
+    "<meta property='og:image' content='https://vinforms.com/public-banner.webp' />",
+    "<meta name='twitter:image' content='https://vinforms.com/public-banner.webp' />",
     "<meta name='twitter:image:width' content='800' />",
     "<meta name='twitter:image:height' content='400' />",
     "<meta name='twitter:card' content='summary_large_image' />",
@@ -137,6 +137,11 @@ query getPaginatedUsers {
   entities: [User]
 }
 
+query getAiUsageCalendarStatus {
+  fn: import { getAiUsageCalendarStatus } from "@src/user/operations",
+  entities: [User]
+}
+
 action updateIsUserAdminById {
   fn: import { updateIsUserAdminById } from "@src/user/operations",
   entities: [User]
@@ -168,6 +173,11 @@ query getCustomerPortalUrl {
 
 action generateCheckoutSession {
   fn: import { generateCheckoutSession } from "@src/payment/operations",
+  entities: [User]
+}
+
+action syncSubscriptionFromLemon {
+  fn: import { syncSubscriptionFromLemon } from "@src/payment/operations",
   entities: [User]
 }
 

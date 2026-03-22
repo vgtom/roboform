@@ -54,5 +54,7 @@ function generateMockUserData(): MockUserData {
       ? faker.helpers.arrayElement(getSubscriptionPaymentPlanIds())
       : null,
     aiUsageCount: 0,
+    lemonSubscriptionId: null,
+    aiUsagePeriodEndsAt: null,
   };
 }
