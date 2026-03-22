@@ -98,6 +98,21 @@ page LandingPage {
   component: import LandingPage from "@src/landing-page/LandingPage"
 }
 
+route TermsRoute { path: "/terms", to: TermsPage }
+page TermsPage {
+  component: import TermsPage from "@src/pages/TermsPage"
+}
+
+route PrivacyRoute { path: "/privacy", to: PrivacyPage }
+page PrivacyPage {
+  component: import PrivacyPage from "@src/pages/PrivacyPage"
+}
+
+route RefundPolicyRoute { path: "/refund-policy", to: RefundPolicyPage }
+page RefundPolicyPage {
+  component: import RefundPolicyPage from "@src/pages/RefundPolicyPage"
+}
+
 //#region Auth Pages
 route LoginRoute { path: "/login", to: LoginPage }
 page LoginPage {
