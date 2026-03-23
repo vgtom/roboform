@@ -619,6 +619,7 @@ export default function FormBuilderPage() {
                       {hasVoiceInputAccess(userPlan) && (
                         <AiVoicePromptButton
                           disabled={isGenerating || isAIDisabled}
+                          onRecordingStart={() => setAiPrompt("")}
                           onTranscript={mergeAiTranscript}
                         />
                       )}

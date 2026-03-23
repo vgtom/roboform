@@ -44,6 +44,8 @@ function blobToBase64(blob: Blob): Promise<string> {
 export type AiVoicePromptButtonProps = {
   /** Called with Whisper transcript text; merge into your prompt in the parent. */
   onTranscript: (text: string) => void;
+  /** When the user taps to start a new recording (before capture); use to clear the prompt field. */
+  onRecordingStart?: () => void;
   disabled?: boolean;
   className?: string;
 };
@@ -54,6 +56,7 @@ export type AiVoicePromptButtonProps = {
  */
 export function AiVoicePromptButton({
   onTranscript,
+  onRecordingStart,
   disabled,
   className,
 }: AiVoicePromptButtonProps) {
@@ -163,6 +166,7 @@ export function AiVoicePromptButton({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      onRecordingStart?.();
       const mime = pickRecorderMimeType();
       const mr = mime
         ? new MediaRecorder(stream, { mimeType: mime })
@@ -186,7 +190,14 @@ export function AiVoicePromptButton({
         variant: "destructive",
       });
     }
-  }, [disabled, isRecording, isTranscribing, stopRecordingAndSend, toast]);
+  }, [
+    disabled,
+    isRecording,
+    isTranscribing,
+    onRecordingStart,
+    stopRecordingAndSend,
+    toast,
+  ]);
 
   const handleClick = () => {
     if (isTranscribing || disabled) {

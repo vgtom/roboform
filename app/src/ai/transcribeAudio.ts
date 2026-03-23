@@ -1,7 +1,11 @@
 import OpenAI, { toFile } from "openai";
-import { HttpError } from "wasp/server";
+import { HttpError, prisma } from "wasp/server";
 import type { TranscribeAudioForAiPrompt } from "wasp/server/operations";
 import * as z from "zod";
+import {
+  assertRoomForSecondAiStep,
+  ensureAiUsageBillingPeriodAligned,
+} from "./aiUsageBillingPeriod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { PaymentPlanId, hasVoiceInputAccess } from "../payment/plans";
 
@@ -38,6 +42,9 @@ export const transcribeAudioForAiPrompt: TranscribeAudioForAiPrompt<
       "Voice input is available on the Ultimate plan only. Upgrade to use voice-based AI prompts.",
     );
   }
+
+  await ensureAiUsageBillingPeriodAligned(context.user.id, prisma);
+  await assertRoomForSecondAiStep(context.user.id, prisma);
 
   const { audioBase64, mimeType } = ensureArgsSchemaOrThrowHttpError(
     transcribeAudioSchema,
@@ -92,6 +99,13 @@ export const transcribeAudioForAiPrompt: TranscribeAudioForAiPrompt<
     const transcription = await openai.audio.transcriptions.create({
       file,
       model: "whisper-1",
+    });
+
+    // Count as soon as OpenAI accepts the Whisper request (billed per their pricing). Includes
+    // “failed” UX outcomes (e.g. empty transcript) whenever the API call completed successfully.
+    await prisma.user.update({
+      where: { id: context.user.id },
+      data: { aiUsageCount: { increment: 1 } },
     });
 
     const text = transcription.text?.trim() ?? "";

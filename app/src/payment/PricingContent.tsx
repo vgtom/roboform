@@ -72,7 +72,7 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
     description: "Maximum AI power with voice-based prompts",
     features: [
       "Everything in Pro",
-      "10,000 AI interactions per billing period",
+      "12,500 AI interactions per billing period",
       "Voice input for AI prompts (Whisper transcription)",
       "Dedicated priority support",
     ],

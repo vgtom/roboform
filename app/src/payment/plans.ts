@@ -65,7 +65,7 @@ export const AI_USAGE_LIMITS = {
   [PaymentPlanId.Free]: { enabled: false, interactionLimit: 0 }, // No AI features
   [PaymentPlanId.Starter]: { enabled: true, interactionLimit: 150 }, // 150 AI interactions per period
   [PaymentPlanId.Pro]: { enabled: true, interactionLimit: 2500 }, // 2500 AI interactions per period
-  [PaymentPlanId.Ultimate]: { enabled: true, interactionLimit: 10000 }, // 10000 AI interactions + voice
+  [PaymentPlanId.Ultimate]: { enabled: true, interactionLimit: 12500 }, // 12500 AI interactions (incl. voice) per period
 } as const;
 
 /** Voice input (Whisper) is only available on Ultimate. */

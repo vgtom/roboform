@@ -413,6 +413,7 @@ export default function WorkspacesPage() {
                         {hasVoiceInputAccess(userPlan) && (
                           <AiVoicePromptButton
                             disabled={isGenerating || isAIDisabled}
+                            onRecordingStart={() => setAiPrompt("")}
                             onTranscript={mergeAiTranscript}
                           />
                         )}
@@ -595,6 +596,7 @@ export default function WorkspacesPage() {
                       {hasVoiceInputAccess(userPlan) && (
                         <AiVoicePromptButton
                           disabled={isGenerating || isAIDisabled}
+                          onRecordingStart={() => setAiPrompt("")}
                           onTranscript={mergeAiTranscript}
                         />
                       )}
