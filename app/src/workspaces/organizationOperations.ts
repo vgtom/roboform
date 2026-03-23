@@ -1,4 +1,5 @@
 import { HttpError, prisma } from "wasp/server";
+import { hasProTierOrHigher, PaymentPlanId } from "../payment/plans";
 import type {
   GetUserOrganizations,
   UpdateOrganization,
@@ -9,8 +10,6 @@ import { ensureAiUsageBillingPeriodAligned } from "../ai/aiUsageBillingPeriod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { generateSlug } from "../shared/utils";
 import { OrganizationRole } from "@prisma/client";
-import { PaymentPlanId } from "../payment/plans";
-
 export const getUserOrganizations: GetUserOrganizations<
   {},
   Array<{
@@ -83,8 +82,10 @@ export const updateOrganization: UpdateOrganization<
     throw new HttpError(404, "User not found");
   }
 
-  if (user.subscriptionPlan !== PaymentPlanId.Pro) {
-    throw new HttpError(403, "Organization name editing requires PRO plan");
+  const plan =
+    (user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  if (!hasProTierOrHigher(plan)) {
+    throw new HttpError(403, "Organization name editing requires PRO or Ultimate plan");
   }
 
   // Check if user is OWNER or ADMIN
@@ -151,8 +152,10 @@ export const inviteOrganizationMember: InviteOrganizationMember<
     throw new HttpError(404, "User not found");
   }
 
-  if (user.subscriptionPlan !== PaymentPlanId.Pro) {
-    throw new HttpError(403, "Team member invites require PRO plan");
+  const plan =
+    (user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
+  if (!hasProTierOrHigher(plan)) {
+    throw new HttpError(403, "Team member invites require PRO or Ultimate plan");
   }
 
   // Check if user is OWNER or ADMIN

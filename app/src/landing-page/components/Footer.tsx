@@ -84,6 +84,9 @@ export default function Footer({
             </ul>
           </div>
         </div>
+        <p className="mt-16 border-t border-gray-900/10 pt-8 text-center text-sm leading-6 text-gray-500 dark:border-gray-200/10 dark:text-gray-400">
+          © 2026 VinForms
+        </p>
       </footer>
     </div>
   );

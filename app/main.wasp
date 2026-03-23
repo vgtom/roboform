@@ -3,20 +3,20 @@ app OpenSaaS {
     version: "^0.20.0"
   },
 
-  title: "VinForms",
+  title: "VinForms – AI Form Builder",
 
   head: [
     "<link rel='icon' href='/favicon.ico' />",
     "<meta charset='utf-8' />",
-    "<meta name='description' content='Build and share forms with AI — VinForms by TeslaForms.' />",
+    "<meta name='description' content='VinForms is an AI-powered form builder for surveys, feedback, and registrations. Create beautiful forms in seconds—no coding required.' />",
     "<meta name='author' content='VinForms' />",
     "<meta name='keywords' content='forms, surveys, ai, teslaforms, vinforms, saas' />",
 
     "<meta property='og:type' content='website' />",
-    "<meta property='og:title' content='VinForms' />",
+    "<meta property='og:title' content='VinForms – AI Form Builder' />",
     "<meta property='og:site_name' content='VinForms' />",
     "<meta property='og:url' content='https://vinforms.com' />",
-    "<meta property='og:description' content='Build and share forms with AI — VinForms by TeslaForms.' />",
+    "<meta property='og:description' content='VinForms is an AI-powered form builder for surveys, feedback, and registrations. Create beautiful forms in seconds—no coding required.' />",
     "<meta property='og:image' content='https://vinforms.com/public-banner.webp' />",
     "<meta name='twitter:image' content='https://vinforms.com/public-banner.webp' />",
     "<meta name='twitter:image:width' content='800' />",
@@ -81,6 +81,10 @@ app OpenSaaS {
 
   client: {
     rootComponent: import App from "@src/client/App",
+  },
+
+  server: {
+    middlewareConfigFn: import { serverMiddlewareFn } from "@src/server/serverSetup",
   },
 
   emailSender: {
@@ -453,5 +457,10 @@ action generateFormWithAI {
 action modifyFormWithAI {
   fn: import { modifyFormWithAI } from "@src/ai/modifyFormWithAI",
   entities: [User, Form, Workspace, Organization, OrganizationMember]
+}
+
+action transcribeAudioForAiPrompt {
+  fn: import { transcribeAudioForAiPrompt } from "@src/ai/transcribeAudio",
+  entities: [User]
 }
 //#endregion

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "wasp/client/operations";
 import {
   getForm,
@@ -81,7 +81,7 @@ import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared
 import { generateId } from "../shared/utils";
 import { cn } from "../client/utils";
 import { useAuth } from "wasp/client/auth";
-import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
+import { PaymentPlanId, AI_USAGE_LIMITS, hasVoiceInputAccess } from "../payment/plans";
 import {
   Dialog,
   DialogContent,
@@ -91,6 +91,7 @@ import {
 } from "../client/components/ui/dialog";
 import { FormSlideshow } from "./FormSlideshow";
 import { PricingModal } from "../payment/PricingModal";
+import { AiVoicePromptButton } from "../client/components/AiVoicePromptButton";
 
 export default function FormBuilderPage() {
   const { formId, workspaceId } = useParams<{ formId: string; workspaceId: string }>();
@@ -130,6 +131,15 @@ export default function FormBuilderPage() {
   const isAIDisabled =
     !aiLimit.enabled ||
     (aiLimit.enabled && aiUsageCount >= effectiveLimit);
+
+  const mergeAiTranscript = useCallback((text: string) => {
+    setAiPrompt((prev) => {
+      const t = text.trim();
+      if (!t) return prev;
+      const merged = prev.trim() ? `${prev.trim()} ${t}` : t;
+      return merged.slice(0, 400);
+    });
+  }, []);
 
   useEffect(() => {
     if (form?.schemaJson) {
@@ -590,7 +600,7 @@ export default function FormBuilderPage() {
               ) : (
                 <>
                   <div className="flex gap-2">
-                    <div className="flex-1">
+                    <div className="relative flex-1">
                       <Textarea
                         value={aiPrompt}
                         onChange={(e) => {
@@ -599,10 +609,19 @@ export default function FormBuilderPage() {
                           }
                         }}
                         placeholder="Describe changes you want to make to this form... (e.g., 'Add a phone number field', 'Make the email field required')"
-                        className="min-h-[60px] resize-none text-sm"
+                        className={cn(
+                          "min-h-[60px] resize-none text-sm",
+                          hasVoiceInputAccess(userPlan) && "pr-12",
+                        )}
                         disabled={isGenerating || isAIDisabled}
                         maxLength={400}
                       />
+                      {hasVoiceInputAccess(userPlan) && (
+                        <AiVoicePromptButton
+                          disabled={isGenerating || isAIDisabled}
+                          onTranscript={mergeAiTranscript}
+                        />
+                      )}
                       <div className="flex items-center justify-between mt-1">
                         {aiLimit.enabled && (
                           <p className="text-xs text-gray-500">
