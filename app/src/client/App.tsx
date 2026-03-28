@@ -19,6 +19,7 @@ export default function App() {
   const isMarketingPage = useMemo(() => {
     return (
       location.pathname === "/" ||
+      location.pathname === "/about" ||
       location.pathname === "/terms" ||
       location.pathname === "/privacy" ||
       location.pathname === "/refund-policy" ||

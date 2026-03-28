@@ -136,7 +136,7 @@ export const footerNavigation = {
     { name: "Blog", href: BlogUrl },
     { name: "Templates", href: "#" },
   ],
-  company: [{ name: "About", href: "#" }],
+  company: [{ name: "About", href: "/about" }],
   legal: [
     { name: "Terms", href: "/terms" },
     { name: "Privacy", href: "/privacy" },
