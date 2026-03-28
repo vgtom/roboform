@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery } from "wasp/client/operations";
 import {
   getUserOrganizations,
@@ -60,7 +60,7 @@ import {
   Crown,
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
-import { PaymentPlanId, AI_USAGE_LIMITS } from "../payment/plans";
+import { PaymentPlanId, AI_USAGE_LIMITS, hasVoiceInputAccess } from "../payment/plans";
 import { OrganizationRole } from "@prisma/client";
 import { createForm, generateFormWithAI } from "wasp/client/operations";
 import { FORM_TEMPLATES } from "../templates/templates";
@@ -70,6 +70,7 @@ import { WorkspaceNavBar } from "./WorkspaceNavBar";
 import { getRandomColorForId } from "../shared/utils";
 import { cn } from "../client/utils";
 import { PricingModal } from "../payment/PricingModal";
+import { AiVoicePromptButton } from "../client/components/AiVoicePromptButton";
 
 export default function WorkspacesPage() {
   const { data: user, refetch: refetchUser } = useAuth();
@@ -90,6 +91,15 @@ export default function WorkspacesPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [createFormMode, setCreateFormMode] = useState<"manual" | "ai">("manual");
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+
+  const mergeAiTranscript = useCallback((text: string) => {
+    setAiPrompt((prev) => {
+      const t = text.trim();
+      if (!t) return prev;
+      const merged = prev.trim() ? `${prev.trim()} ${t}` : t;
+      return merged.slice(0, 400);
+    });
+  }, []);
 
   const { data: organizations, isLoading: orgsLoading } = useQuery(
     getUserOrganizations,
@@ -384,7 +394,7 @@ export default function WorkspacesPage() {
                 ) : (
                   <>
                     <div className="flex gap-3">
-                      <div className="flex-1">
+                      <div className="relative flex-1">
                         <Textarea
                           value={aiPrompt}
                           onChange={(e) => {
@@ -393,10 +403,20 @@ export default function WorkspacesPage() {
                             }
                           }}
                           placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
-                          className="min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400"
+                          className={cn(
+                            "min-h-[80px] resize-none bg-white border-blue-200 focus:border-blue-400",
+                            hasVoiceInputAccess(userPlan) && "pr-12",
+                          )}
                           disabled={isGenerating || isAIDisabled}
                           maxLength={400}
                         />
+                        {hasVoiceInputAccess(userPlan) && (
+                          <AiVoicePromptButton
+                            disabled={isGenerating || isAIDisabled}
+                            onRecordingStart={() => setAiPrompt("")}
+                            onTranscript={mergeAiTranscript}
+                          />
+                        )}
                         <div className="flex items-center justify-between mt-1">
                           {aiLimit.enabled && (
                             <p className="text-xs text-gray-500">
@@ -557,18 +577,30 @@ export default function WorkspacesPage() {
                 <>
                   <div>
                     <Label>Describe your form</Label>
-                    <Textarea
-                      value={aiPrompt}
-                      onChange={(e) => {
-                        if (e.target.value.length <= 400) {
-                          setAiPrompt(e.target.value);
-                        }
-                      }}
-                      placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
-                      className="mt-1 min-h-[120px]"
-                      disabled={isGenerating}
-                      maxLength={400}
-                    />
+                    <div className="relative mt-1">
+                      <Textarea
+                        value={aiPrompt}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 400) {
+                            setAiPrompt(e.target.value);
+                          }
+                        }}
+                        placeholder="e.g., Create a SaaS onboarding form with email, company name, team size, and use case selection..."
+                        className={cn(
+                          "min-h-[120px]",
+                          hasVoiceInputAccess(userPlan) && "pr-12",
+                        )}
+                        disabled={isGenerating || isAIDisabled}
+                        maxLength={400}
+                      />
+                      {hasVoiceInputAccess(userPlan) && (
+                        <AiVoicePromptButton
+                          disabled={isGenerating || isAIDisabled}
+                          onRecordingStart={() => setAiPrompt("")}
+                          onTranscript={mergeAiTranscript}
+                        />
+                      )}
+                    </div>
                     <div className="flex items-center justify-between mt-1">
                       <p className="text-xs text-muted-foreground">
                         Describe what kind of form you want to create. AI will generate the form structure for you.
@@ -584,7 +616,7 @@ export default function WorkspacesPage() {
                   <Button
                     onClick={handleGenerateWithAI}
                     className="w-full"
-                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || aiPrompt.length > 400 || isGenerating}
+                    disabled={!aiPrompt.trim() || aiPrompt.trim().length < 10 || aiPrompt.length > 400 || isGenerating || isAIDisabled}
                   >
                     {isGenerating ? (
                       <>

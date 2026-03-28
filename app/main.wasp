@@ -3,25 +3,27 @@ app OpenSaaS {
     version: "^0.20.0"
   },
 
-  title: "VinForms",
+  title: "Vinforms - AI Form Builder",
 
   head: [
     "<link rel='icon' href='/favicon.ico' />",
     "<meta charset='utf-8' />",
-    "<meta name='description' content='Build and share forms with AI — VinForms by TeslaForms.' />",
+    "<meta name='description' content='Vinforms is an AI-powered form builder to create smart, dynamic forms instantly.' />",
     "<meta name='author' content='VinForms' />",
     "<meta name='keywords' content='forms, surveys, ai, teslaforms, vinforms, saas' />",
 
     "<meta property='og:type' content='website' />",
-    "<meta property='og:title' content='VinForms' />",
-    "<meta property='og:site_name' content='VinForms' />",
+    "<meta property='og:title' content='Vinforms - AI Form Builder' />",
+    "<meta property='og:site_name' content='Vinforms' />",
     "<meta property='og:url' content='https://vinforms.com' />",
-    "<meta property='og:description' content='Build and share forms with AI — VinForms by TeslaForms.' />",
-    "<meta property='og:image' content='https://vinforms.com/public-banner.webp' />",
-    "<meta name='twitter:image' content='https://vinforms.com/public-banner.webp' />",
+    "<meta property='og:description' content='Create forms with AI. Faster, smarter, and more powerful than traditional tools.' />",
+    "<meta property='og:image' content='https://vinforms.com/og-image.png' />",
+    "<meta name='twitter:image' content='https://vinforms.com/og-image.png' />",
     "<meta name='twitter:image:width' content='800' />",
     "<meta name='twitter:image:height' content='400' />",
     "<meta name='twitter:card' content='summary_large_image' />",
+    "<script type='application/ld+json'>{\"@context\":\"https://schema.org\",\"@type\":\"SoftwareApplication\",\"name\":\"Vinforms\",\"operatingSystem\":\"Web\",\"applicationCategory\":\"BusinessApplication\",\"url\":\"https://vinforms.com\",\"description\":\"Vinforms is an AI-powered form builder that allows users to create, deploy, and analyze smart web forms and surveys using artificial intelligence.\",\"offers\":{\"@type\":\"Offer\",\"price\":\"0\",\"priceCurrency\":\"USD\"},\"aggregateRating\":{\"@type\":\"AggregateRating\",\"ratingValue\":\"5\",\"ratingCount\":\"1\"},\"featureList\":[\"AI-powered form generation\",\"No-code interface\",\"Real-time analytics\",\"Customizable templates\"],\"author\":{\"@type\":\"Organization\",\"name\":\"Vinforms\",\"url\":\"https://vinforms.com\"}}</script>",
+    "<script type='application/ld+json'>{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Vinforms\",\"url\":\"https://vinforms.com\",\"logo\":\"https://vinforms.com/logo.png\",\"sameAs\":[\"https://www.linkedin.com/company/vinforms\"]}</script>",
     // TODO: You can put your Plausible analytics scripts below (https://docs.opensaas.sh/guides/analytics/):
     // NOTE: Plausible does not use Cookies, so you can simply add the scripts here.
     // Google, on the other hand, does, so you must instead add the script dynamically
@@ -83,6 +85,10 @@ app OpenSaaS {
     rootComponent: import App from "@src/client/App",
   },
 
+  server: {
+    middlewareConfigFn: import { serverMiddlewareFn } from "@src/server/serverSetup",
+  },
+
   emailSender: {
     provider: SendGrid,
     defaultFrom: {
@@ -96,6 +102,26 @@ app OpenSaaS {
 route LandingPageRoute { path: "/", to: LandingPage }
 page LandingPage {
   component: import LandingPage from "@src/landing-page/LandingPage"
+}
+
+route AboutRoute { path: "/about", to: AboutPage }
+page AboutPage {
+  component: import AboutPage from "@src/pages/AboutPage"
+}
+
+route TermsRoute { path: "/terms", to: TermsPage }
+page TermsPage {
+  component: import TermsPage from "@src/pages/TermsPage"
+}
+
+route PrivacyRoute { path: "/privacy", to: PrivacyPage }
+page PrivacyPage {
+  component: import PrivacyPage from "@src/pages/PrivacyPage"
+}
+
+route RefundPolicyRoute { path: "/refund-policy", to: RefundPolicyPage }
+page RefundPolicyPage {
+  component: import RefundPolicyPage from "@src/pages/RefundPolicyPage"
 }
 
 //#region Auth Pages
@@ -438,5 +464,10 @@ action generateFormWithAI {
 action modifyFormWithAI {
   fn: import { modifyFormWithAI } from "@src/ai/modifyFormWithAI",
   entities: [User, Form, Workspace, Organization, OrganizationMember]
+}
+
+action transcribeAudioForAiPrompt {
+  fn: import { transcribeAudioForAiPrompt } from "@src/ai/transcribeAudio",
+  entities: [User]
 }
 //#endregion

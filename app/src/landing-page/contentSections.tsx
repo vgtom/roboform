@@ -136,10 +136,11 @@ export const footerNavigation = {
     { name: "Blog", href: BlogUrl },
     { name: "Templates", href: "#" },
   ],
-  company: [
-    { name: "About", href: "#" },
-    { name: "Privacy", href: "#" },
-    { name: "Terms of Service", href: "#" },
+  company: [{ name: "About", href: "/about" }],
+  legal: [
+    { name: "Terms", href: "/terms" },
+    { name: "Privacy", href: "/privacy" },
+    { name: "Refund Policy", href: "/refund-policy" },
   ],
 };
 

@@ -23,7 +23,7 @@ import {
   SubscriptionStatus,
 } from "./plans";
 
-const bestDealPaymentPlanId: PaymentPlanId = PaymentPlanId.Pro;
+const bestDealPaymentPlanId: PaymentPlanId = PaymentPlanId.Ultimate;
 
 interface PaymentPlanCard {
   name: string;
@@ -35,7 +35,7 @@ interface PaymentPlanCard {
 const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
   [PaymentPlanId.Free]: {
     name: prettyPaymentPlanName(PaymentPlanId.Free),
-    price: "₹0",
+    price: "$0",
     description: "Perfect for getting started",
     features: [
       "5 credits (5 forms)",
@@ -46,7 +46,7 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
   },
   [PaymentPlanId.Starter]: {
     name: prettyPaymentPlanName(PaymentPlanId.Starter),
-    price: "₹799",
+    price: "$7.99",
     description: "AI features with 150 interactions",
     features: [
       "Everything in Free",
@@ -57,7 +57,7 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
   },
   [PaymentPlanId.Pro]: {
     name: prettyPaymentPlanName(PaymentPlanId.Pro),
-    price: "₹3,999",
+    price: "$59.99",
     description: "Advanced AI features with 2500 interactions",
     features: [
       "Everything in Starter",
@@ -66,25 +66,39 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
       "Priority support",
     ],
   },
+  [PaymentPlanId.Ultimate]: {
+    name: prettyPaymentPlanName(PaymentPlanId.Ultimate),
+    price: "$249.99",
+    description: "Maximum AI power with voice-based prompts",
+    features: [
+      "Everything in Pro",
+      "12,500 AI interactions per billing period",
+      "Voice input for AI prompts (Whisper transcription)",
+      "Dedicated priority support",
+    ],
+  },
 };
 
-const defaultSubtitle = (
-  <>
-    Choose between Stripe, LemonSqueezy or Polar as your payment provider.
-    Just add your Product IDs! Try it out below with test credit card
-    number <br />
-    <span className="bg-muted text-muted-foreground rounded-md px-2 py-1 font-mono text-sm">
-      4242 4242 4242 4242 4242
-    </span>
-  </>
+/** Shown under "Pick your pricing" on /pricing and in the upgrade modal */
+export const defaultPricingSubtitle = (
+  <span>
+    Upgrade your plan to unlock more features and get the most out of
+    VinForms.
+  </span>
 );
 
+
 export interface PricingContentProps {
-  /** When provided (e.g. in modal), shown under "Pick your pricing" instead of the default payment-provider text */
+  /** When provided, shown under "Pick your pricing" instead of the default VinForms subtitle */
   subtitle?: ReactNode;
+  /** Wider, denser layout for dialogs so four plans fit comfortably */
+  variant?: "page" | "modal";
 }
 
-export function PricingContent({ subtitle = defaultSubtitle }: PricingContentProps) {
+export function PricingContent({
+  subtitle = defaultPricingSubtitle,
+  variant = "page",
+}: PricingContentProps) {
   const [isPaymentLoading, setIsPaymentLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -147,14 +161,37 @@ export function PricingContent({ subtitle = defaultSubtitle }: PricingContentPro
     window.open(customerPortalUrl, "_blank");
   };
 
+  const isModal = variant === "modal";
+
   return (
-    <div className="mx-auto max-w-7xl px-6 lg:px-8">
-      <div id="pricing" className="mx-auto max-w-4xl text-center">
-        <h2 className="text-foreground mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
+    <div
+      className={cn(
+        "mx-auto max-w-7xl px-6 lg:px-8",
+        isModal && "max-w-full px-0",
+      )}
+    >
+      <div
+        id="pricing"
+        className={cn(
+          "mx-auto max-w-4xl text-center",
+          isModal && "max-w-full",
+        )}
+      >
+        <h2
+          className={cn(
+            "text-foreground mt-2 text-4xl font-bold tracking-tight sm:text-5xl",
+            isModal && "text-2xl sm:text-3xl lg:text-4xl",
+          )}
+        >
           Pick your <span className="text-primary">pricing</span>
         </h2>
       </div>
-      <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-center text-lg leading-8">
+      <p
+        className={cn(
+          "text-muted-foreground mx-auto mt-6 max-w-2xl text-center text-lg leading-8",
+          isModal && "mt-3 max-w-full text-sm sm:text-base",
+        )}
+      >
         {subtitle}
       </p>
       {errorMessage && (
@@ -162,8 +199,19 @@ export function PricingContent({ subtitle = defaultSubtitle }: PricingContentPro
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       )}
-      <div className="isolate mx-auto mt-16 grid max-w-md grid-cols-1 gap-y-8 sm:mt-20 lg:mx-0 lg:max-w-none lg:grid-cols-3 lg:gap-x-8">
-        {[PaymentPlanId.Free, PaymentPlanId.Starter, PaymentPlanId.Pro].map((planId) => (
+      <div
+        className={
+          isModal
+            ? "isolate mx-auto mt-6 grid w-full max-w-none grid-cols-1 gap-4 sm:mt-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-3 xl:gap-4"
+            : "isolate mx-auto mt-16 grid max-w-md grid-cols-1 gap-y-8 sm:mt-20 lg:mx-0 lg:max-w-none sm:grid-cols-2 xl:grid-cols-4 lg:gap-x-8"
+        }
+      >
+        {[
+          PaymentPlanId.Free,
+          PaymentPlanId.Starter,
+          PaymentPlanId.Pro,
+          PaymentPlanId.Ultimate,
+        ].map((planId) => (
           <Card
             key={planId}
             className={cn(
@@ -172,7 +220,9 @@ export function PricingContent({ subtitle = defaultSubtitle }: PricingContentPro
                 "ring-primary !bg-transparent ring-2":
                   planId === bestDealPaymentPlanId,
                 "ring-border ring-1 lg:my-8":
-                  planId !== bestDealPaymentPlanId,
+                  planId !== bestDealPaymentPlanId && !isModal,
+                "ring-border ring-1 lg:my-1":
+                  planId !== bestDealPaymentPlanId && isModal,
               },
             )}
           >
@@ -189,31 +239,52 @@ export function PricingContent({ subtitle = defaultSubtitle }: PricingContentPro
                 />
               </div>
             )}
-            <CardContent className="h-full justify-between p-8 xl:p-10">
+            <CardContent
+              className={cn(
+                "h-full justify-between",
+                isModal ? "p-4 sm:p-5" : "p-8 xl:p-10",
+              )}
+            >
               <div className="flex items-center justify-between gap-x-4">
                 <CardTitle
                   id={planId}
-                  className="text-foreground text-lg font-semibold leading-8"
+                  className={cn(
+                    "text-foreground text-lg font-semibold leading-8",
+                    isModal && "text-base leading-7",
+                  )}
                 >
                   {paymentPlanCards[planId].name}
                 </CardTitle>
               </div>
-              <p className="text-muted-foreground mt-4 text-sm leading-6">
+              <p
+                className={cn(
+                  "text-muted-foreground mt-4 text-sm leading-6",
+                  isModal && "mt-2 text-xs sm:text-sm",
+                )}
+              >
                 {paymentPlanCards[planId].description}
               </p>
-              <p className="mt-6 flex items-baseline gap-x-1">
-                <span className="text-foreground text-4xl font-bold tracking-tight">
+              <p className={cn("mt-6 flex items-baseline gap-x-1", isModal && "mt-4")}>
+                <span
+                  className={cn(
+                    "text-foreground text-4xl font-bold tracking-tight",
+                    isModal && "text-2xl sm:text-3xl",
+                  )}
+                >
                   {paymentPlanCards[planId].price}
                 </span>
                 <span className="text-muted-foreground text-sm font-semibold leading-6">
                   {planId !== PaymentPlanId.Free &&
                     paymentPlans[planId].effect.kind === "subscription" &&
-                    "/month (INR)"}
+                    "/month (USD)"}
                 </span>
               </p>
               <ul
                 role="list"
-                className="text-muted-foreground mt-8 space-y-3 text-sm leading-6"
+                className={cn(
+                  "text-muted-foreground mt-8 space-y-3 text-sm leading-6",
+                  isModal && "mt-4 space-y-2 text-xs sm:text-sm",
+                )}
               >
                 {paymentPlanCards[planId].features.map((feature) => (
                   <li key={feature} className="flex gap-x-3">

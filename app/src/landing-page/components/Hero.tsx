@@ -14,9 +14,12 @@ export default function Hero() {
             <span className="text-gray-700">AI-Powered Form Builder</span>
           </div>
           <h1 className="text-foreground text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
+            VinForms
+          </h1>
+          <p className="text-foreground mx-auto mt-4 max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
             Create beautiful AI forms{" "}
             <span className="text-gradient-primary">in seconds</span>
-          </h1>
+          </p>
           <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg leading-8 sm:text-xl">
             Build powerful forms with AI, collect responses, and analyze results—all in one place. 
             No coding required.

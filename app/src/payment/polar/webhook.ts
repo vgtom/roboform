@@ -91,6 +91,7 @@ async function handleOrderPaid(
   switch (paymentPlanId) {
     case PaymentPlanId.Starter:
     case PaymentPlanId.Pro:
+    case PaymentPlanId.Ultimate:
       await updateUserSubscription(
         {
           paymentProcessorUserId: order.customerId,

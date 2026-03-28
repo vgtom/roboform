@@ -11,7 +11,7 @@ import {
 } from "../client/components/ui/dropdown-menu";
 import { ChevronDown, Users, Building2, Settings, CreditCard, Crown } from "lucide-react";
 import { UserDropdown } from "../user/UserDropdown";
-import { PaymentPlanId } from "../payment/plans";
+import { PaymentPlanId, hasProTierOrHigher } from "../payment/plans";
 import { Card, CardContent } from "../client/components/ui/card";
 
 interface WorkspaceNavBarProps {
@@ -33,7 +33,9 @@ export function WorkspaceNavBar({
 }: WorkspaceNavBarProps) {
   const { data: user } = useAuth();
   const selectedOrg = organizations.find((org) => org.id === selectedOrgId);
-  const isPro = user?.subscriptionPlan === PaymentPlanId.Pro;
+  const isProTier = hasProTierOrHigher(
+    (user?.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free,
+  );
 
   return (
     <>
@@ -73,7 +75,7 @@ export function WorkspaceNavBar({
 
           {/* PRO Upgrade Banner and User Dropdown */}
           <div className="flex items-center gap-3">
-            {!isPro && (
+            {!isProTier && (
               <Card className="border-yellow-200 bg-yellow-50 mr-2">
                 <CardContent className="p-2 flex items-center gap-2">
                   <Crown className="h-4 w-4 text-yellow-600 flex-shrink-0" />

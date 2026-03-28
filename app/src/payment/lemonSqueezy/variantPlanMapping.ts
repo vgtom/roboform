@@ -9,7 +9,7 @@ export function getPlanIdByVariantId(variantId: string): PaymentPlanId {
   if (!planId) {
     throw new HttpError(
       422,
-      `Unknown Lemon variant_id "${variantId}". Set PAYMENTS_STARTER_SUBSCRIPTION_PLAN_ID and/or PAYMENTS_PRO_SUBSCRIPTION_PLAN_ID on the server to this exact variant id (Lemon test vs live stores use different ids).`,
+      `Unknown Lemon variant_id "${variantId}". Set PAYMENTS_STARTER_SUBSCRIPTION_PLAN_ID, PAYMENTS_PRO_SUBSCRIPTION_PLAN_ID, and/or PAYMENTS_ULTIMATE_SUBSCRIPTION_PLAN_ID on the server to this exact variant id (Lemon test vs live stores use different ids).`,
     );
   }
   return planId;

@@ -11,6 +11,7 @@ export enum PaymentPlanId {
   Free = "free",
   Starter = "starter",
   Pro = "pro",
+  Ultimate = "ultimate",
 }
 
 export interface PaymentPlan {
@@ -42,6 +43,11 @@ export const paymentPlans = {
       requireNodeEnvVar("PAYMENTS_PRO_SUBSCRIPTION_PLAN_ID"),
     effect: { kind: "subscription" },
   },
+  [PaymentPlanId.Ultimate]: {
+    getPaymentProcessorPlanId: () =>
+      requireNodeEnvVar("PAYMENTS_ULTIMATE_SUBSCRIPTION_PLAN_ID"),
+    effect: { kind: "subscription" },
+  },
 } as const satisfies Record<PaymentPlanId, PaymentPlan>;
 
 export function prettyPaymentPlanName(planId: PaymentPlanId): string {
@@ -49,6 +55,7 @@ export function prettyPaymentPlanName(planId: PaymentPlanId): string {
     [PaymentPlanId.Free]: "Free",
     [PaymentPlanId.Starter]: "Starter",
     [PaymentPlanId.Pro]: "Pro",
+    [PaymentPlanId.Ultimate]: "Ultimate",
   };
   return planToName[planId];
 }
@@ -58,7 +65,18 @@ export const AI_USAGE_LIMITS = {
   [PaymentPlanId.Free]: { enabled: false, interactionLimit: 0 }, // No AI features
   [PaymentPlanId.Starter]: { enabled: true, interactionLimit: 150 }, // 150 AI interactions per period
   [PaymentPlanId.Pro]: { enabled: true, interactionLimit: 2500 }, // 2500 AI interactions per period
+  [PaymentPlanId.Ultimate]: { enabled: true, interactionLimit: 12500 }, // 12500 AI interactions (incl. voice) per period
 } as const;
+
+/** Voice input (Whisper) is only available on Ultimate. */
+export function hasVoiceInputAccess(planId: PaymentPlanId): boolean {
+  return planId === PaymentPlanId.Ultimate;
+}
+
+/** Features that were historically “PRO-only” (team/org features, etc.). */
+export function hasProTierOrHigher(planId: PaymentPlanId): boolean {
+  return planId === PaymentPlanId.Pro || planId === PaymentPlanId.Ultimate;
+}
 
 // Credits limits for free plan
 export const FREE_PLAN_CREDITS = 5;
