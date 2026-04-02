@@ -17,9 +17,17 @@ export async function createLemonSqueezyCheckoutSession({
   const clientUrl = requireNodeEnvVar("WASP_WEB_CLIENT_URL").replace(/\/$/, "");
   const redirectUrl = `${clientUrl}/workspaces?payment=success`;
 
+  // Lemon shows every variant of the same product by default. Lock checkout to this variant only.
+  // https://docs.lemonsqueezy.com/api/checkouts/create-checkout — product_options.enabled_variants
+  const variantIdNum = Number.parseInt(String(variantId), 10);
+  if (Number.isNaN(variantIdNum)) {
+    throw new Error(`Invalid Lemon variant id (expected integer): ${variantId}`);
+  }
+
   const { data: session, error } = await createCheckout(storeId, variantId, {
     productOptions: {
       redirectUrl,
+      enabledVariants: [variantIdNum],
     },
     checkoutData: {
       email: userEmail,

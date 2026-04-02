@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Effective Date:** 22 March 2026
+**Effective Date:** 2 April 2026
 
 Welcome to VinForms ("we", "our", or "us"). These Terms of Service ("Terms") govern your access to and use of our website, products, and services (collectively, the "Service") available at https://vinforms.com.
 
@@ -64,7 +64,7 @@ VinForms is not liable for decisions made based on AI-generated content.
 
 ## 6. Payments and Billing
 
-VinForms offers paid subscription plans.
+VinForms offers paid **subscription** plans and may offer **one-time** purchases (for example, a “Lifetime Deal” or similar prepaid access sold for a single upfront payment).
 
 Payments are processed through third-party payment providers, including Lemon Squeezy, which may act as the Merchant of Record.
 
@@ -75,6 +75,8 @@ By purchasing a subscription, you agree:
 * That subscriptions may renew automatically unless canceled
 
 You may cancel your subscription at any time, and access will continue until the end of the billing period.
+
+**One-time / Lifetime purchases:** Where offered, these are a single charge (no recurring subscription unless you separately subscribe). Features, usage limits (such as AI interaction caps), and scope of access are those described at checkout and on our pricing pages at the time of purchase. We may describe such offers as “lifetime” in reference to access to the Service under those terms for as long as we continue to operate the Service; it does not imply an obligation to maintain any specific feature forever.
 
 ---
 
