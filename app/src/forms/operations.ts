@@ -1,4 +1,6 @@
+import { Prisma } from "@prisma/client";
 import { HttpError, prisma } from "wasp/server";
+import { assertCanCreateForm } from "./formAndSubmissionLimits";
 import type {
   CreateForm,
   GetForms,
@@ -144,51 +146,59 @@ export const createForm: CreateForm<
 
   await checkFormAccess(context.user.id, workspaceId, OrganizationRole.EDITOR);
 
-  let baseSlug = generateSlug(name);
-  let slug = baseSlug;
-  
-  // Ensure slug is globally unique
-  let counter = 1;
-  let existingSlug = await prisma.form.findFirst({
-    where: { slug },
-  });
-  
-  while (existingSlug) {
-    slug = `${baseSlug}-${counter}`;
-    existingSlug = await prisma.form.findFirst({
-      where: { slug },
-    });
-    counter++;
-  }
-
-  // Also check workspace uniqueness (though global should be enough)
-  const workspaceExisting = await prisma.form.findUnique({
-    where: {
-      workspaceId_slug: {
-        workspaceId,
-        slug,
-      },
-    },
-  });
-
-  if (workspaceExisting) {
-    // If workspace conflict, append timestamp
-    slug = `${slug}-${Date.now().toString(36)}`;
-  }
-
   const formSchema = schemaJson
     ? validateFormSchema(schemaJson)
     : DEFAULT_FORM_SCHEMA;
 
-  const newForm = await context.entities.Form.create({
-    data: {
-      name,
-      slug,
-      workspaceId,
-      schemaJson: formSchema as any,
-      status: FormStatus.DRAFT,
+  const newForm = await prisma.$transaction(
+    async (tx) => {
+      await assertCanCreateForm(tx, workspaceId);
+
+      let baseSlug = generateSlug(name);
+      let slug = baseSlug;
+
+      let counter = 1;
+      let existingSlug = await tx.form.findFirst({
+        where: { slug },
+      });
+
+      while (existingSlug) {
+        slug = `${baseSlug}-${counter}`;
+        existingSlug = await tx.form.findFirst({
+          where: { slug },
+        });
+        counter++;
+      }
+
+      const workspaceExisting = await tx.form.findUnique({
+        where: {
+          workspaceId_slug: {
+            workspaceId,
+            slug,
+          },
+        },
+      });
+
+      if (workspaceExisting) {
+        slug = `${slug}-${Date.now().toString(36)}`;
+      }
+
+      return tx.form.create({
+        data: {
+          name,
+          slug,
+          workspaceId,
+          schemaJson: formSchema as any,
+          status: FormStatus.DRAFT,
+        },
+      });
     },
-  });
+    {
+      maxWait: 5000,
+      timeout: 15000,
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    },
+  );
 
   return newForm;
 };

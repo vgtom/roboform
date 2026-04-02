@@ -1604,6 +1604,57 @@ function ResultsTab({
               <p className="text-sm text-gray-500">No submissions yet.</p>
             ) : (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-end gap-3 border-b border-gray-200 px-4 py-3 bg-white">
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      const toCsvCell = (v: unknown): string => {
+                        const s = v === null || v === undefined ? "" : String(v);
+                        // Quote cells when they contain CSV-special characters.
+                        if (/["\n\r,]/.test(s)) {
+                          return `"${s.replace(/"/g, '""')}"`;
+                        }
+                        return s;
+                      };
+
+                      const headers = ["id", "createdAt", "responseJson"];
+                      const rows = (responses ?? []).map((r: any) => {
+                        let responseJsonStr = "";
+                        try {
+                          responseJsonStr = JSON.stringify(r.responseJson ?? null);
+                        } catch {
+                          responseJsonStr = String(r.responseJson ?? "");
+                        }
+
+                        return [
+                          toCsvCell(r.id),
+                          toCsvCell(new Date(r.createdAt).toISOString()),
+                          toCsvCell(responseJsonStr),
+                        ];
+                      });
+
+                      const csv = [
+                        headers.join(","),
+                        ...rows.map((row) => row.join(",")),
+                      ].join("\n");
+
+                      const blob = new Blob([csv], {
+                        type: "text/csv;charset=utf-8",
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${formName || "form"}-submissions.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download CSV
+                  </Button>
+                </div>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>

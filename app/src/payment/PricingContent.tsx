@@ -38,7 +38,8 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
     price: "$0",
     description: "Perfect for getting started",
     features: [
-      "5 credits (5 forms)",
+      "Up to 5 forms",
+      "100 total submissions (lifetime)",
       "Basic form builder",
       "All standard features",
       "No AI features",
@@ -49,6 +50,8 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
     price: "$7.99",
     description: "AI features with 150 interactions",
     features: [
+      "Unlimited forms",
+      "10,000 submissions per billing period",
       "Everything in Free",
       "AI-powered form generation",
       "AI form modifications",
@@ -60,6 +63,7 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
     price: "$59.99",
     description: "Advanced AI features with 2500 interactions",
     features: [
+      "Unlimited forms and submissions",
       "Everything in Starter",
       "Enhanced AI-powered features",
       "2500 AI interactions included",
@@ -71,6 +75,7 @@ const paymentPlanCards: Record<PaymentPlanId, PaymentPlanCard> = {
     price: "$249.99",
     description: "Maximum AI power with voice-based prompts",
     features: [
+      "Unlimited forms and submissions",
       "Everything in Pro",
       "12,500 AI interactions per billing period",
       "Voice input for AI prompts (Whisper transcription)",
@@ -117,6 +122,14 @@ export function PricingContent({
   const navigate = useNavigate();
 
   async function handleBuyNowClick(paymentPlanId: PaymentPlanId) {
+    if (paymentPlanId === PaymentPlanId.Free) {
+      if (!user) {
+        navigate("/signup");
+      } else {
+        navigate("/workspaces");
+      }
+      return;
+    }
     if (!user) {
       navigate("/login");
       return;
@@ -320,7 +333,13 @@ export function PricingContent({
                   className="w-full"
                   disabled={isPaymentLoading}
                 >
-                  {!!user ? "Buy plan" : "Log in to buy plan"}
+                  {planId === PaymentPlanId.Free
+                    ? user
+                      ? "Go to app"
+                      : "Get started free"
+                    : !!user
+                      ? "Buy plan"
+                      : "Log in to buy plan"}
                 </Button>
               )}
             </CardFooter>

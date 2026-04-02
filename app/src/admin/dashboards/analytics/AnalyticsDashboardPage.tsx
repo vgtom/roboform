@@ -27,49 +27,56 @@ const Dashboard = ({ user }: { user: AuthUser }) => {
     );
   }
 
+  const hasGeneratedDailyStats =
+    !!stats && stats.dailyStats?.id !== -1 && stats.weeklyStats?.length !== 0;
+
   return (
     <DefaultLayout user={user}>
       <div className="relative">
         <div
           className={cn({
-            "opacity-25": !stats,
+            "opacity-25": !hasGeneratedDailyStats,
           })}
         >
-          <div className="2xl:gap-7.5 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-4">
-            <TotalPageViewsCard
-              totalPageViews={stats?.dailyStats.totalViews}
-              prevDayViewsChangePercent={
-                stats?.dailyStats.prevDayViewsChangePercent
-              }
-            />
-            <TotalRevenueCard
-              dailyStats={stats?.dailyStats}
-              weeklyStats={stats?.weeklyStats}
-              isLoading={isLoading}
-            />
-            <TotalPayingUsersCard
-              dailyStats={stats?.dailyStats}
-              isLoading={isLoading}
-            />
-            <TotalSignupsCard
-              dailyStats={stats?.dailyStats}
-              isLoading={isLoading}
-            />
-          </div>
+          {hasGeneratedDailyStats && (
+            <>
+              <div className="2xl:gap-7.5 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-4">
+                <TotalPageViewsCard
+                  totalPageViews={stats.dailyStats.totalViews}
+                  prevDayViewsChangePercent={
+                    stats.dailyStats.prevDayViewsChangePercent
+                  }
+                />
+                <TotalRevenueCard
+                  dailyStats={stats.dailyStats}
+                  weeklyStats={stats.weeklyStats}
+                  isLoading={isLoading}
+                />
+                <TotalPayingUsersCard
+                  dailyStats={stats.dailyStats}
+                  isLoading={isLoading}
+                />
+                <TotalSignupsCard
+                  dailyStats={stats.dailyStats}
+                  isLoading={isLoading}
+                />
+              </div>
 
-          <div className="2xl:mt-7.5 2xl:gap-7.5 mt-4 grid grid-cols-12 gap-4 md:mt-6 md:gap-6">
-            <RevenueAndProfitChart
-              weeklyStats={stats?.weeklyStats}
-              isLoading={isLoading}
-            />
+              <div className="2xl:mt-7.5 2xl:gap-7.5 mt-4 grid grid-cols-12 gap-4 md:mt-6 md:gap-6">
+                <RevenueAndProfitChart
+                  weeklyStats={stats.weeklyStats}
+                  isLoading={isLoading}
+                />
 
-            <div className="col-span-12 xl:col-span-8">
-              <SourcesTable sources={stats?.dailyStats?.sources} />
-            </div>
-          </div>
+                <div className="col-span-12 xl:col-span-8">
+                  <SourcesTable sources={stats.dailyStats?.sources} />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {!stats && (
+        {!hasGeneratedDailyStats && (
           <div className="bg-background/50 absolute inset-0 flex items-start justify-center">
             <div className="bg-card rounded-lg p-8 shadow-lg">
               <p className="text-foreground text-2xl font-bold">
