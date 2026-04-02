@@ -136,9 +136,11 @@ function AiUsageSection({ user }: { user: User }) {
                 </span>{" "}
                 remaining of{" "}
                 <span className="tabular-nums">{cap}</span>{" "}
-                per billing period ({used} used)
+                {status?.quotaScope === "lifetime"
+                  ? `lifetime total (${used} used)`
+                  : `per billing period (${used} used)`}
               </p>
-              {status?.billingPeriodEndsAt && (
+              {status?.quotaScope !== "lifetime" && status?.billingPeriodEndsAt && (
                 <p className="text-muted-foreground text-xs">
                   Current billing period ends:{" "}
                   {new Date(status.billingPeriodEndsAt).toLocaleString(undefined, {
@@ -148,9 +150,9 @@ function AiUsageSection({ user }: { user: User }) {
                 </p>
               )}
               <p className="text-muted-foreground text-xs">
-                Quota resets when your subscription renews (same schedule as
-                Lemon Squeezy billing). Each AI action uses up to 2 interactions
-                (prompt check + generate or modify).
+                {status?.quotaScope === "lifetime"
+                  ? "Lifetime plan: your AI interaction count does not reset with renewals. Each AI action uses up to 2 interactions (prompt check + generate or modify)."
+                  : "Quota resets when your subscription renews (same schedule as Lemon Squeezy billing). Each AI action uses up to 2 interactions (prompt check + generate or modify)."}
               </p>
             </>
           )}

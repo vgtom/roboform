@@ -12,7 +12,7 @@ import {
 import { requireNodeEnvVar } from "../../server/utils";
 import { assertUnreachable } from "../../shared/utils";
 import { UnhandledWebhookEventError } from "../errors";
-import { SubscriptionStatus } from "../plans";
+import { PaymentPlanId, SubscriptionStatus } from "../plans";
 import { resetUserToFreePlan, updateUserLemonSqueezyPaymentDetails } from "./paymentDetails";
 import { getPlanIdByVariantId } from "./variantPlanMapping";
 import {
@@ -219,7 +219,7 @@ async function handleOrderCreated(
     data.attributes;
   const lemonSqueezyId = customer_id.toString();
 
-  getPlanIdByVariantId(first_order_item.variant_id.toString());
+  const planId = getPlanIdByVariantId(first_order_item.variant_id.toString());
 
   let lemonSqueezyCustomerPortalUrl: string | undefined;
   try {
@@ -234,9 +234,32 @@ async function handleOrderCreated(
     );
   }
 
-  // All plans are now subscriptions (no credits plan)
-  // Only update customer portal URL and lemonSqueezyId for orders
-  // Subscription details will be handled by subscription_created/updated events
+  // One-time Lifetime (LTD) products: no subscription_created; grant plan here when paid.
+  if (
+    planId === PaymentPlanId.Lifetime &&
+    String(status).toLowerCase() === "paid"
+  ) {
+    await updateUserLemonSqueezyPaymentDetails(
+      {
+        lemonSqueezyId,
+        userId,
+        lemonSqueezyCustomerPortalUrl,
+        subscriptionPlan: PaymentPlanId.Lifetime,
+        subscriptionStatus: SubscriptionStatus.Active,
+        datePaid: new Date(),
+        aiUsageCount: 0,
+        lemonSubscriptionId: null,
+        aiUsagePeriodEndsAt: null,
+      },
+      prismaUserDelegate,
+    );
+    console.log(
+      `[Lemon webhook] order_created ${order_number}: Lifetime plan activated for user ${userId}`,
+    );
+    return;
+  }
+
+  // Subscriptions: subscription_created/updated set the plan; here we only persist Lemon customer id + portal URL.
   await updateUserLemonSqueezyPaymentDetails(
     {
       lemonSqueezyId,

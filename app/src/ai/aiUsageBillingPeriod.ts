@@ -2,7 +2,11 @@ import type { PrismaClient } from "@prisma/client";
 import { getSubscription, listSubscriptions } from "@lemonsqueezy/lemonsqueezy.js";
 import { HttpError } from "wasp/server";
 import { requireNodeEnvVar } from "../server/utils";
-import { AI_USAGE_LIMITS, PaymentPlanId } from "../payment/plans";
+import {
+  AI_USAGE_LIMITS,
+  getAiUsageQuotaScope,
+  PaymentPlanId,
+} from "../payment/plans";
 
 /** One evaluation + one generation/modification per user action. */
 export const AI_PIPELINE_TOTAL_COST = 2;
@@ -110,6 +114,9 @@ export async function ensureAiUsageBillingPeriodAligned(
   if (!AI_USAGE_LIMITS[plan].enabled) {
     return;
   }
+  if (getAiUsageQuotaScope(plan) === "lifetime") {
+    return;
+  }
 
   const now = Date.now();
 
@@ -210,9 +217,12 @@ export async function assertAiPipelineAllowed(
   }
   const { interactionLimit: limit } = aiLimit;
   if (user.aiUsageCount + AI_PIPELINE_TOTAL_COST > limit) {
+    const scope = getAiUsageQuotaScope(plan);
     throw new HttpError(
       403,
-      `AI usage limit reached for this billing period. You have ${limit} AI interactions per period (${plan} plan). Usage resets when your subscription renews (see billing period end), or upgrade for a higher limit.`,
+      scope === "lifetime"
+        ? `AI usage limit reached for your lifetime plan (${limit} AI interactions total).`
+        : `AI usage limit reached for this billing period. You have ${limit} AI interactions per period (${plan} plan). Usage resets when your subscription renews (see billing period end), or upgrade for a higher limit.`,
     );
   }
   return { limit };
@@ -236,9 +246,12 @@ export async function assertRoomForSecondAiStep(
     return;
   }
   if (user.aiUsageCount >= aiLimit.interactionLimit) {
+    const scope = getAiUsageQuotaScope(plan);
     throw new HttpError(
       403,
-      `AI usage limit reached for this billing period (${aiLimit.interactionLimit} interactions). Further AI calls are blocked until the next renewal or a plan upgrade.`,
+      scope === "lifetime"
+        ? `AI usage limit reached (${aiLimit.interactionLimit} lifetime interactions).`
+        : `AI usage limit reached for this billing period (${aiLimit.interactionLimit} interactions). Further AI calls are blocked until the next renewal or a plan upgrade.`,
     );
   }
 }

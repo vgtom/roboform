@@ -9,7 +9,12 @@ import {
 } from "wasp/server/operations";
 import * as z from "zod";
 import { ensureAiUsageBillingPeriodAligned } from "../ai/aiUsageBillingPeriod";
-import { AI_USAGE_LIMITS, PaymentPlanId, SubscriptionStatus } from "../payment/plans";
+import {
+  AI_USAGE_LIMITS,
+  getAiUsageQuotaScope,
+  PaymentPlanId,
+  SubscriptionStatus,
+} from "../payment/plans";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 
 const updateUserAdminByIdInputSchema = z.object({
@@ -221,8 +226,10 @@ export const getAiUsageCalendarStatus: GetAiUsageCalendarStatus<
     enabled: boolean;
     used: number;
     limit: number;
-    /** ISO end of current prepaid period (Lemon renews_at / ends_at); null if unknown */
+    /** ISO end of current prepaid period (Lemon renews_at / ends_at); null for lifetime quota or unknown */
     billingPeriodEndsAt: string | null;
+    /** `lifetime` = total cap never resets with renewals */
+    quotaScope: "billing_period" | "lifetime" | null;
   }
 > = async (_args, context) => {
   if (!context.user) {
@@ -243,10 +250,15 @@ export const getAiUsageCalendarStatus: GetAiUsageCalendarStatus<
   const plan =
     (user.subscriptionPlan as PaymentPlanId) || PaymentPlanId.Free;
   const cfg = AI_USAGE_LIMITS[plan];
+  const quotaScope = getAiUsageQuotaScope(plan);
   return {
     enabled: cfg.enabled,
     used: user.aiUsageCount,
     limit: cfg.enabled ? cfg.interactionLimit : 0,
-    billingPeriodEndsAt: user.aiUsagePeriodEndsAt?.toISOString() ?? null,
+    billingPeriodEndsAt:
+      quotaScope === "lifetime"
+        ? null
+        : user.aiUsagePeriodEndsAt?.toISOString() ?? null,
+    quotaScope,
   };
 };

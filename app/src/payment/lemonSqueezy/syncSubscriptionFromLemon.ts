@@ -38,6 +38,14 @@ export async function syncSubscriptionFromLemonForUser(
     return { synced: false, message: "Your account needs an email to sync billing." };
   }
 
+  if (userRow?.subscriptionPlan === PaymentPlanId.Lifetime) {
+    return {
+      synced: true,
+      message:
+        "Your Lifetime plan is already active. Subscription sync only applies to monthly plans.",
+    };
+  }
+
   const storeId = requireNodeEnvVar("LEMONSQUEEZY_STORE_ID");
   let subs: Awaited<ReturnType<typeof fetchSubscriptionsForStoreAndUser>>;
   try {

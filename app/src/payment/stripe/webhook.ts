@@ -111,6 +111,7 @@ async function handleInvoicePaid(
     case PaymentPlanId.Starter:
     case PaymentPlanId.Pro:
     case PaymentPlanId.Ultimate:
+    case PaymentPlanId.Lifetime:
       await updateUserSubscription(
         {
           paymentProcessorUserId: customerId,
