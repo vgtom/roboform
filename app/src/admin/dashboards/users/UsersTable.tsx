@@ -53,7 +53,7 @@ const UsersTable = () => {
 
   const skipPages = currentPage - 1;
 
-  const { data, isLoading } = useQuery(getPaginatedUsers, {
+  const { data, isLoading, refetch } = useQuery(getPaginatedUsers, {
     skipPages,
     filter: {
       ...(debouncedEmailFilter && { emailContains: debouncedEmailFilter }),
@@ -311,7 +311,10 @@ const UsersTable = () => {
                 </div>
               </div>
               <div className="col-span-1 flex items-center">
-                <DropdownEditDelete />
+                <DropdownEditDelete
+                  user={user}
+                  onMutationSuccess={() => void refetch()}
+                />
               </div>
             </div>
           ))}

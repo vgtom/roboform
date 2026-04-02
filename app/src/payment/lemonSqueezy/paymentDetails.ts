@@ -15,6 +15,7 @@ export async function resetUserToFreePlan(
       subscriptionPlan: PaymentPlanId.Free,
       subscriptionStatus: SubscriptionStatus.Deleted,
       aiUsageCount: 0,
+      submissionUsageCount: 0,
       lemonSubscriptionId: null,
       aiUsagePeriodEndsAt: null,
       datePaid: null,

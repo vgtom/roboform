@@ -20,8 +20,10 @@ model User {
   subscriptionStatus        String?         // 'active', 'cancel_at_period_end', 'past_due', 'deleted'
   subscriptionPlan          String?         // 'free', 'starter', 'pro', 'ultimate'
   datePaid                  DateTime?
-  credits                   Int             @default(5) // Free plan gets 5 credits
+  credits                   Int             @default(5) // Legacy OpenSaaS field; form limits enforced in app
   aiUsageCount               Int             @default(0) // Track AI interaction count (prompts/modifications)
+  /// Starter: form submissions in current billing period (resets with aiUsagePeriodEndsAt)
+  submissionUsageCount       Int             @default(0)
   /// Lemon Squeezy subscription id (for billing-period AI quota)
   lemonSubscriptionId        String?
   /// End of current prepaid period (renews_at, or ends_at if cancelled) — AI count resets after this

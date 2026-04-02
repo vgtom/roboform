@@ -159,6 +159,7 @@ export async function ensureAiUsageBillingPeriodAligned(
       where: { id: userId },
       data: {
         aiUsageCount: 0,
+        submissionUsageCount: 0,
         ...(newEnd ? { aiUsagePeriodEndsAt: newEnd } : {}),
       },
     });
@@ -181,6 +182,7 @@ export async function applyRenewalInvoiceToAiUsage(
       lemonSubscriptionId,
       aiUsagePeriodEndsAt: end,
       aiUsageCount: 0,
+      submissionUsageCount: 0,
     },
   });
 }

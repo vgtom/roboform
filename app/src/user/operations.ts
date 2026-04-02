@@ -4,6 +4,7 @@ import { HttpError, prisma } from "wasp/server";
 import {
   type GetAiUsageCalendarStatus,
   type GetPaginatedUsers,
+  type DeleteUserById,
   type UpdateIsUserAdminById,
 } from "wasp/server/operations";
 import * as z from "zod";
@@ -44,6 +45,60 @@ export const updateIsUserAdminById: UpdateIsUserAdminById<
   return context.entities.User.update({
     where: { id },
     data: { isAdmin },
+  });
+};
+
+const deleteUserByIdInputSchema = z.object({
+  id: z.string().uuid(),
+});
+
+type DeleteUserByIdInput = z.infer<typeof deleteUserByIdInputSchema>;
+
+/**
+ * Admin "Delete" action for the Users dashboard.
+ * We don't hard-delete the User row to avoid breaking relations; instead we
+ * deactivate the account back to Free / Deleted plan.
+ */
+export const deleteUserById: DeleteUserById<
+  DeleteUserByIdInput,
+  User
+> = async (rawArgs, context) => {
+  const { id } = ensureArgsSchemaOrThrowHttpError(
+    deleteUserByIdInputSchema,
+    rawArgs,
+  );
+
+  if (!context.user) {
+    throw new HttpError(
+      401,
+      "Only authenticated users are allowed to perform this operation",
+    );
+  }
+
+  if (!context.user.isAdmin) {
+    throw new HttpError(
+      403,
+      "Only admins are allowed to perform this operation",
+    );
+  }
+
+  if (context.user.id === id) {
+    throw new HttpError(403, "You cannot delete your own account");
+  }
+
+  return context.entities.User.update({
+    where: { id },
+    data: {
+      isAdmin: false,
+      subscriptionPlan: PaymentPlanId.Free,
+      subscriptionStatus: SubscriptionStatus.Deleted,
+      datePaid: null,
+      credits: 0,
+      aiUsageCount: 0,
+      submissionUsageCount: 0,
+      lemonSubscriptionId: null,
+      aiUsagePeriodEndsAt: null,
+    },
   });
 };
 

@@ -78,8 +78,30 @@ export function hasProTierOrHigher(planId: PaymentPlanId): boolean {
   return planId === PaymentPlanId.Pro || planId === PaymentPlanId.Ultimate;
 }
 
-// Credits limits for free plan
+/** Legacy OpenSaaS credits field; not used for form creation limits (see FORM_LIMITS). */
 export const FREE_PLAN_CREDITS = 5;
+
+/** Max forms per organization (by org owner’s plan). `null` = unlimited. */
+export const FORM_LIMITS: Record<
+  PaymentPlanId,
+  number | null
+> = {
+  [PaymentPlanId.Free]: 5,
+  [PaymentPlanId.Starter]: null,
+  [PaymentPlanId.Pro]: null,
+  [PaymentPlanId.Ultimate]: null,
+};
+
+/** Submission caps: Free = lifetime total per org; Starter = per billing period (see submissionUsageCount). */
+export const SUBMISSION_LIMITS: Record<
+  PaymentPlanId,
+  { max: number | null; scope: "lifetime" | "billing_period" }
+> = {
+  [PaymentPlanId.Free]: { max: 100, scope: "lifetime" },
+  [PaymentPlanId.Starter]: { max: 10_000, scope: "billing_period" },
+  [PaymentPlanId.Pro]: { max: null, scope: "billing_period" },
+  [PaymentPlanId.Ultimate]: { max: null, scope: "billing_period" },
+};
 
 export function parsePaymentPlanId(planId: string): PaymentPlanId {
   if ((Object.values(PaymentPlanId) as string[]).includes(planId)) {

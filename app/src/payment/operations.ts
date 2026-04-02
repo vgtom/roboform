@@ -36,6 +36,12 @@ export const generateCheckoutSession: GenerateCheckoutSession<
     generateCheckoutSessionSchema,
     rawPaymentPlanId,
   );
+  if (paymentPlanId === PaymentPlanId.Free) {
+    throw new HttpError(
+      400,
+      "The Free plan does not use checkout. Use the app without subscribing, or choose a paid plan.",
+    );
+  }
   const userId = context.user.id;
   const userEmail = context.user.email;
   if (!userEmail) {
@@ -44,12 +50,27 @@ export const generateCheckoutSession: GenerateCheckoutSession<
   }
 
   const paymentPlan = paymentPlans[paymentPlanId];
-  const { session } = await paymentProcessor.createCheckoutSession({
-    userId,
-    userEmail,
-    paymentPlan,
-    prismaUserDelegate: context.entities.User,
-  });
+  let session: { id: string; url: string };
+  try {
+    ({ session } = await paymentProcessor.createCheckoutSession({
+      userId,
+      userEmail,
+      paymentPlan,
+      prismaUserDelegate: context.entities.User,
+    }));
+  } catch (err: unknown) {
+    console.error("[generateCheckoutSession] Lemon/processor error:", err);
+    const msg =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+    throw new HttpError(
+      502,
+      `Could not start checkout. If this persists, verify Lemon Squeezy secrets (API key, store ID, variant IDs) and WASP_WEB_CLIENT_URL on the server. ${msg}`,
+    );
+  }
 
   return {
     sessionUrl: session.url,

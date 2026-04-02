@@ -6,7 +6,8 @@ app OpenSaaS {
   title: "Vinforms - AI Form Builder",
 
   head: [
-    "<link rel='icon' href='/favicon.ico' />",
+    // Bump `?v=` when replacing public/favicon.ico so browsers/CDNs fetch the new file (favicons are cached aggressively).
+    "<link rel='icon' href='/favicon.ico?v=2' type='image/x-icon' />",
     "<meta charset='utf-8' />",
     "<meta name='description' content='Vinforms is an AI-powered form builder to create smart, dynamic forms instantly.' />",
     "<meta name='author' content='VinForms' />",
@@ -170,6 +171,11 @@ query getAiUsageCalendarStatus {
 
 action updateIsUserAdminById {
   fn: import { updateIsUserAdminById } from "@src/user/operations",
+  entities: [User]
+}
+
+action deleteUserById {
+  fn: import { deleteUserById } from "@src/user/operations",
   entities: [User]
 }
 //#endregion
@@ -438,7 +444,7 @@ action upsertFormIntegration {
 
 action submitFormResponse {
   fn: import { submitFormResponse } from "@src/responses/operations",
-  entities: [Form, FormResponse, FormResponseField, FormAnalytics]
+  entities: [User, Form, FormResponse, FormResponseField, FormAnalytics, Workspace, Organization, OrganizationMember]
 }
 
 query getFormResponses {

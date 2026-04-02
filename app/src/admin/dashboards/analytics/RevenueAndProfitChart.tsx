@@ -131,12 +131,8 @@ const RevenueAndProfitChart = ({ weeklyStats, isLoading }: DailyStatsProps) => {
   }, [weeklyStats]);
 
   const [state, setState] = useState<ChartOneState>({
-    series: [
-      {
-        name: "Profit",
-        data: [4, 7, 10, 11, 13, 14, 17],
-      },
-    ],
+    // Start with no series; we populate once we have weeklyStats data.
+    series: [],
   });
   const [chartOptions, setChartOptions] = useState<ApexOptions>(options);
 

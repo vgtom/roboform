@@ -1,4 +1,9 @@
+import { Prisma } from "@prisma/client";
 import { HttpError, prisma } from "wasp/server";
+import {
+  assertCanSubmitAndReserveIfNeeded,
+  ensureSubmissionPeriodBeforeSubmit,
+} from "../forms/formAndSubmissionLimits";
 import type { SubmitFormResponse, GetFormResponses } from "wasp/server/operations";
 import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
@@ -26,6 +31,9 @@ export const submitFormResponse: SubmitFormResponse<
 
   const form = await prisma.form.findUnique({
     where: { id: formId },
+    include: {
+      workspace: { select: { organizationId: true } },
+    },
   });
 
   if (!form) {
@@ -36,17 +44,35 @@ export const submitFormResponse: SubmitFormResponse<
     throw new HttpError(400, "Form is not published");
   }
 
-  // Create the main response record
-  const response = await context.entities.FormResponse.create({
-    data: {
-      formId,
-      responseJson, // Keep for backward compatibility
-      metadata: metadata || {},
-      fieldResponses: {
-        create: parseResponseToFields(form.schemaJson as FormSchema, responseJson, formId),
-      },
+  const organizationId = form.workspace.organizationId;
+
+  await ensureSubmissionPeriodBeforeSubmit(prisma, organizationId);
+
+  const response = await prisma.$transaction(
+    async (tx) => {
+      await assertCanSubmitAndReserveIfNeeded(tx, organizationId);
+
+      return tx.formResponse.create({
+        data: {
+          formId,
+          responseJson,
+          metadata: metadata || {},
+          fieldResponses: {
+            create: parseResponseToFields(
+              form.schemaJson as FormSchema,
+              responseJson,
+              formId,
+            ),
+          },
+        },
+      });
     },
-  });
+    {
+      maxWait: 5000,
+      timeout: 15000,
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    },
+  );
 
   await updateFormAnalytics(formId, "submission");
 
