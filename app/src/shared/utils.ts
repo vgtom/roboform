@@ -1,3 +1,5 @@
+import type { FormField } from "./formTypes";
+
 export function generateSlug(text: string): string {
   return text
     .toLowerCase()
@@ -9,6 +11,17 @@ export function generateSlug(text: string): string {
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
+/** Select/radio/multiselect options with text; omits blank lines kept in the builder while editing. */
+export function nonBlankFieldOptions(options: string[] | undefined): string[] {
+  return (options ?? []).filter((o) => o.trim() !== "");
+}
+
+/** Clamped 1–10 for star_rating fields. */
+export function getStarRatingMax(field: FormField): number {
+  const n = field.maxStars ?? 10;
+  return Math.min(10, Math.max(1, Math.round(n)));
 }
 
 export function assertUnreachable(x: never): never {

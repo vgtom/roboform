@@ -10,6 +10,9 @@ import type {
   DeleteForm,
   PublishForm,
   GetPublicForm,
+  GetFormFieldCoverImage,
+  SetFormFieldCoverImage,
+  DeleteFormFieldCoverImage,
   GetFormIntegrations,
   UpsertFormIntegration,
 } from "wasp/server/operations";
@@ -18,6 +21,7 @@ import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { generateSlug, generateId } from "../shared/utils";
 import { FormStatus, OrganizationRole } from "@prisma/client";
 import { FormSchema, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
+import { MAX_FORM_FIELD_COVER_BYTES } from "./coverImageConstants";
 
 const createFormSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -110,6 +114,8 @@ function validateFormSchema(schema: unknown): FormSchema {
             placeholder: z.string().optional(),
             required: z.boolean().optional(),
             image: z.string().optional(),
+            coverInDb: z.boolean().optional(),
+            maxStars: z.number().int().min(1).max(10).optional(),
             options: z.array(z.string()).optional(),
             validation: z
               .object({
@@ -611,5 +617,178 @@ export const getPublicForm: GetPublicForm<
   }
 
   return form;
+};
+
+const formFieldCoverKeySchema = z.object({
+  formId: z.string().uuid(),
+  fieldId: z.string().min(1),
+});
+
+const setFormFieldCoverImageSchema = z.object({
+  formId: z.string().uuid(),
+  fieldId: z.string().min(1),
+  mimeType: z.enum(["image/jpeg", "image/png"]),
+  fileBase64: z.string().min(1),
+});
+
+export type FormFieldCoverImagePayload = {
+  mimeType: string;
+  dataBase64: string;
+};
+
+export const getFormFieldCoverImage: GetFormFieldCoverImage<
+  z.infer<typeof formFieldCoverKeySchema>,
+  FormFieldCoverImagePayload | null
+> = async (rawArgs, context) => {
+  const { formId, fieldId } = ensureArgsSchemaOrThrowHttpError(
+    formFieldCoverKeySchema,
+    rawArgs,
+  );
+
+  const form = await prisma.form.findUnique({
+    where: { id: formId },
+    include: {
+      workspace: {
+        include: {
+          organization: { include: { members: true } },
+        },
+      },
+    },
+  });
+
+  if (!form) {
+    return null;
+  }
+
+  const parsedSchema = form.schemaJson as FormSchema;
+  const field = parsedSchema.fields?.find((f) => f.id === fieldId);
+  if (!field) {
+    return null;
+  }
+
+  const isPublished = form.status === FormStatus.PUBLISHED;
+  const userId = context.user?.id;
+  const member = userId
+    ? form.workspace.organization.members.find((m) => m.userId === userId)
+    : undefined;
+
+  if (!isPublished && !member) {
+    return null;
+  }
+
+  const row = await prisma.formFieldCoverImage.findUnique({
+    where: {
+      formId_fieldId: { formId, fieldId },
+    },
+  });
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    mimeType: row.mimeType,
+    dataBase64: Buffer.from(row.imageData).toString("base64"),
+  };
+};
+
+export const setFormFieldCoverImage: SetFormFieldCoverImage<
+  z.infer<typeof setFormFieldCoverImageSchema>,
+  { ok: true }
+> = async (rawArgs, context) => {
+  if (!context.user) {
+    throw new HttpError(401, "Authentication required");
+  }
+
+  const { formId, fieldId, mimeType, fileBase64 } =
+    ensureArgsSchemaOrThrowHttpError(setFormFieldCoverImageSchema, rawArgs);
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(fileBase64, "base64");
+  } catch {
+    throw new HttpError(400, "Invalid image data");
+  }
+
+  if (
+    buffer.length === 0 ||
+    buffer.length >= MAX_FORM_FIELD_COVER_BYTES
+  ) {
+    throw new HttpError(
+      400,
+      `Image must be smaller than ${MAX_FORM_FIELD_COVER_BYTES / 1024 / 1024}MB`,
+    );
+  }
+
+  const form = await prisma.form.findUnique({
+    where: { id: formId },
+  });
+
+  if (!form) {
+    throw new HttpError(404, "Form not found");
+  }
+
+  await checkFormAccess(
+    context.user.id,
+    form.workspaceId,
+    OrganizationRole.EDITOR,
+  );
+
+  const parsedSchema = form.schemaJson as FormSchema;
+  if (!parsedSchema.fields?.some((f) => f.id === fieldId)) {
+    throw new HttpError(400, "Unknown field for this form");
+  }
+
+  await prisma.formFieldCoverImage.upsert({
+    where: {
+      formId_fieldId: { formId, fieldId },
+    },
+    create: {
+      formId,
+      fieldId,
+      imageData: buffer,
+      mimeType,
+    },
+    update: {
+      imageData: buffer,
+      mimeType,
+    },
+  });
+
+  return { ok: true };
+};
+
+export const deleteFormFieldCoverImage: DeleteFormFieldCoverImage<
+  z.infer<typeof formFieldCoverKeySchema>,
+  { ok: true }
+> = async (rawArgs, context) => {
+  if (!context.user) {
+    throw new HttpError(401, "Authentication required");
+  }
+
+  const { formId, fieldId } = ensureArgsSchemaOrThrowHttpError(
+    formFieldCoverKeySchema,
+    rawArgs,
+  );
+
+  const form = await prisma.form.findUnique({
+    where: { id: formId },
+  });
+
+  if (!form) {
+    throw new HttpError(404, "Form not found");
+  }
+
+  await checkFormAccess(
+    context.user.id,
+    form.workspaceId,
+    OrganizationRole.EDITOR,
+  );
+
+  await prisma.formFieldCoverImage.deleteMany({
+    where: { formId, fieldId },
+  });
+
+  return { ok: true };
 };
 

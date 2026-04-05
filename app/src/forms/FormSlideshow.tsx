@@ -10,8 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../client/components/ui/select";
-import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Star } from "lucide-react";
 import { FormSchema, FormField } from "../shared/formTypes";
+import { nonBlankFieldOptions, getStarRatingMax } from "../shared/utils";
+import { FieldCoverImage } from "./FieldCoverImage";
 
 interface FormSlideshowProps {
   schema: FormSchema;
@@ -21,6 +23,8 @@ interface FormSlideshowProps {
   isSubmitting?: boolean;
   submitted?: boolean;
   readOnly?: boolean;
+  /** Required to load BYTEA cover images from Postgres for this form */
+  formId?: string;
 }
 
 export function FormSlideshow({
@@ -31,6 +35,7 @@ export function FormSlideshow({
   isSubmitting = false,
   submitted = false,
   readOnly = false,
+  formId,
 }: FormSlideshowProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const fields = schema.fields || [];
@@ -89,6 +94,15 @@ export function FormSlideshow({
       if (currentField.type === "multiselect") {
         return Array.isArray(value) && value.length > 0;
       }
+      if (currentField.type === "star_rating") {
+        const max = getStarRatingMax(currentField);
+        return (
+          typeof value === "number" &&
+          value >= 1 &&
+          value <= max &&
+          Number.isInteger(value)
+        );
+      }
       return value !== undefined && value !== null && value !== "";
     }
     return true;
@@ -117,6 +131,9 @@ export function FormSlideshow({
       {/* Form Content */}
       <div className="flex-1 flex items-center justify-center">
         <div className="w-full max-w-2xl text-center">
+          {(currentField.image || currentField.coverInDb) && (
+            <FieldCoverImage field={currentField} formId={formId} />
+          )}
           <h2 className="text-3xl font-bold mb-2 text-white">
             {currentField.label || "Untitled Question"}
           </h2>
@@ -124,8 +141,11 @@ export function FormSlideshow({
             <p className="text-blue-100 mb-8">{currentField.placeholder}</p>
           )}
           <div className="mt-8 flex justify-center">
-            {renderField(currentField, formData[currentField.id] || "", (value) =>
-              onFieldChange(currentField.id, value),
+            {renderField(
+              currentField,
+              formData[currentField.id],
+              (value) => onFieldChange(currentField.id, value),
+              readOnly,
             )}
           </div>
         </div>
@@ -166,12 +186,19 @@ export function FormSlideshow({
   );
 }
 
-function renderField(field: FormField, value: any, onChange: (value: any) => void) {
+function renderField(
+  field: FormField,
+  value: any,
+  onChange: (value: any) => void,
+  readOnly = false,
+) {
+  const inputValue = value ?? "";
+
   switch (field.type) {
     case "textarea":
       return (
         <Textarea
-          value={value}
+          value={inputValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
           className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full"
@@ -179,15 +206,50 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
           required={field.required}
         />
       );
+    case "star_rating": {
+      const max = getStarRatingMax(field);
+      const selected =
+        typeof value === "number" && value >= 1 && value <= max
+          ? value
+          : undefined;
+      return (
+        <div
+          className="flex flex-wrap items-center justify-center gap-1 max-w-md mx-auto"
+          role="group"
+          aria-label={`Star rating, 1 to ${max}`}
+        >
+          {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+            <button
+              key={`${field.id}-star-${n}`}
+              type="button"
+              disabled={readOnly}
+              onClick={() => onChange(n)}
+              className="p-1 rounded-md transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 disabled:opacity-60 disabled:pointer-events-none"
+              aria-label={`${n} star${n === 1 ? "" : "s"}`}
+              aria-pressed={selected !== undefined && n <= selected}
+            >
+              <Star
+                className={`h-9 w-9 sm:h-10 sm:w-10 ${
+                  selected !== undefined && n <= selected
+                    ? "fill-yellow-400 text-yellow-400"
+                    : "text-white/35"
+                }`}
+                strokeWidth={selected !== undefined && n <= selected ? 0 : 1.5}
+              />
+            </button>
+          ))}
+        </div>
+      );
+    }
     case "select":
       return (
-        <Select value={value} onValueChange={onChange} required={field.required}>
+        <Select value={inputValue} onValueChange={onChange} required={field.required}>
           <SelectTrigger className="bg-white/20 border-white/30 text-white w-full max-w-md">
             <SelectValue placeholder={field.placeholder || "Select an option..."} />
           </SelectTrigger>
           <SelectContent>
-            {field.options?.map((opt) => (
-              <SelectItem key={opt} value={opt}>
+            {nonBlankFieldOptions(field.options).map((opt, i) => (
+              <SelectItem key={`${field.id}-opt-${i}`} value={opt}>
                 {opt}
               </SelectItem>
             ))}
@@ -197,9 +259,9 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
     case "radio":
       return (
         <div className="space-y-3 w-full max-w-md mx-auto">
-          {field.options?.map((opt) => (
+          {nonBlankFieldOptions(field.options).map((opt, i) => (
             <div
-              key={opt}
+              key={`${field.id}-opt-${i}`}
               onClick={() => onChange(opt)}
               className={`bg-white/20 border border-white/30 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30 transition ${
                 value === opt ? "bg-white/30 border-white/50" : ""
@@ -229,11 +291,11 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
     case "multiselect":
       return (
         <div className="space-y-2 w-full max-w-md mx-auto text-left">
-          {field.options?.map((opt) => (
-            <div key={opt} className="flex items-center gap-3">
+          {nonBlankFieldOptions(field.options).map((opt, i) => (
+            <div key={`${field.id}-opt-${i}`} className="flex items-center gap-3">
               <input
                 type="checkbox"
-                id={`${field.id}-${opt}`}
+                id={`${field.id}-opt-${i}`}
                 checked={Array.isArray(value) && value.includes(opt)}
                 onChange={(e) => {
                   const current = Array.isArray(value) ? value : [];
@@ -245,7 +307,7 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
                 }}
                 className="w-5 h-5 rounded border-white/30 bg-white/20 text-yellow-400 focus:ring-yellow-400"
               />
-              <Label htmlFor={`${field.id}-${opt}`} className="text-white cursor-pointer">
+              <Label htmlFor={`${field.id}-opt-${i}`} className="text-white cursor-pointer">
                 {opt}
               </Label>
             </div>
@@ -256,7 +318,7 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
       return (
         <Input
           type="email"
-          value={value}
+          value={inputValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder || "Enter your email..."}
           className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full max-w-md"
@@ -267,7 +329,7 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
       return (
         <Input
           type="number"
-          value={value}
+          value={inputValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder || "Enter a number..."}
           className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full max-w-md"
@@ -278,7 +340,7 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
       return (
         <Input
           type="date"
-          value={value}
+          value={inputValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder || "Select a date..."}
           className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full max-w-md"
@@ -289,7 +351,7 @@ function renderField(field: FormField, value: any, onChange: (value: any) => voi
       return (
         <Input
           type="text"
-          value={value}
+          value={inputValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder || "Enter your answer..."}
           className="bg-white/20 border-white/30 text-white placeholder:text-white/70 w-full max-w-md"

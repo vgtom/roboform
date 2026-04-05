@@ -8,7 +8,8 @@ export type FieldType =
   | "radio"
   | "checkbox"
   | "date"
-  | "file";
+  | "file"
+  | "star_rating";
 
 export interface FormField {
   id: string;
@@ -16,7 +17,12 @@ export interface FormField {
   label: string;
   placeholder?: string;
   required?: boolean;
+  /** Star rating: max selectable stars (1–10). Default 10. */
+  maxStars?: number;
+  /** HTTPS or data URL shown as-is on slides */
   image?: string;
+  /** When true, a JPEG/PNG is stored in Postgres (BYTEA) for this field */
+  coverInDb?: boolean;
   options?: string[]; // For select, multiselect, radio
   validation?: {
     min?: number;

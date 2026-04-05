@@ -9,6 +9,7 @@ import * as z from "zod";
 import { ensureArgsSchemaOrThrowHttpError } from "../server/validation";
 import { FormStatus } from "@prisma/client";
 import { FormSchema, FormField } from "../shared/formTypes";
+import { getStarRatingMax } from "../shared/utils";
 
 const submitFormResponseSchema = z.object({
   formId: z.string().uuid(),
@@ -310,6 +311,24 @@ function parseResponseToFields(
           });
         }
         break;
+
+      case "star_rating": {
+        const raw =
+          typeof responseValue === "number"
+            ? responseValue
+            : typeof responseValue === "string"
+              ? parseInt(responseValue, 10)
+              : NaN;
+        const maxStars = getStarRatingMax(field);
+        if (Number.isInteger(raw) && raw >= 1 && raw <= maxStars) {
+          fieldResponses.push({
+            ...baseData,
+            value: String(raw),
+            valueNumber: raw,
+          });
+        }
+        break;
+      }
 
       case "checkbox":
         fieldResponses.push({

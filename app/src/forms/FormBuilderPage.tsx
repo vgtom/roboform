@@ -1,4 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ChangeEvent,
+} from "react";
 import { useQuery } from "wasp/client/operations";
 import {
   getForm,
@@ -10,6 +16,8 @@ import {
   getFormAnalytics,
   getFormResponses,
   getAiUsageCalendarStatus,
+  setFormFieldCoverImage,
+  deleteFormFieldCoverImage,
 } from "wasp/client/operations";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../client/components/ui/button";
@@ -78,7 +86,7 @@ import {
 } from "lucide-react";
 import { useToast } from "../client/hooks/use-toast";
 import { FormSchema, FormField, FieldType, DEFAULT_FORM_SCHEMA } from "../shared/formTypes";
-import { generateId } from "../shared/utils";
+import { generateId, nonBlankFieldOptions, getStarRatingMax } from "../shared/utils";
 import { cn } from "../client/utils";
 import { useAuth } from "wasp/client/auth";
 import { PaymentPlanId, AI_USAGE_LIMITS, hasVoiceInputAccess } from "../payment/plans";
@@ -90,6 +98,8 @@ import {
   DialogTitle,
 } from "../client/components/ui/dialog";
 import { FormSlideshow } from "./FormSlideshow";
+import { FieldCoverImage } from "./FieldCoverImage";
+import { MAX_FORM_FIELD_COVER_BYTES } from "./coverImageConstants";
 import { PricingModal } from "../payment/PricingModal";
 import { AiVoicePromptButton } from "../client/components/AiVoicePromptButton";
 
@@ -106,6 +116,8 @@ export default function FormBuilderPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishSuccessOpen, setIsPublishSuccessOpen] = useState(false);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [draggingFieldId, setDraggingFieldId] = useState<string | null>(null);
+  const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null);
 
   const { data: user } = useAuth();
   const { data: aiUsageStatus, refetch: refetchAiUsage } = useQuery(
@@ -252,13 +264,30 @@ export default function FormBuilderPage() {
     }
   };
 
-  const deleteField = (fieldId: string) => {
-    const newFields = schema.fields.filter((f) => f.id !== fieldId);
-    setSchema({ ...schema, fields: newFields });
-    if (selectedFieldId === fieldId) {
-      setSelectedFieldId(newFields.length > 0 ? newFields[0].id : null);
-    }
-  };
+  const persistSchema = useCallback(
+    (newSchema: FormSchema) => {
+      setSchema(newSchema);
+      if (formId) {
+        updateForm({ id: formId, schemaJson: newSchema }).catch(() => {});
+      }
+    },
+    [formId],
+  );
+
+  const deleteField = useCallback(
+    (fieldId: string) => {
+      if (formId) {
+        deleteFormFieldCoverImage({ formId, fieldId }).catch(() => {});
+      }
+      const newFields = schema.fields.filter((f) => f.id !== fieldId);
+      const newSchema = { ...schema, fields: newFields };
+      if (selectedFieldId === fieldId) {
+        setSelectedFieldId(newFields.length > 0 ? newFields[0].id : null);
+      }
+      persistSchema(newSchema);
+    },
+    [schema, selectedFieldId, persistSchema, formId],
+  );
 
   const moveField = (fieldId: string, direction: "up" | "down") => {
     const index = schema.fields.findIndex((f) => f.id === fieldId);
@@ -272,7 +301,19 @@ export default function FormBuilderPage() {
       newFields[newIndex],
       newFields[index],
     ];
-    setSchema({ ...schema, fields: newFields });
+    persistSchema({ ...schema, fields: newFields });
+  };
+
+  /** Reorder when dropping one block onto another (HTML5 DnD). */
+  const reorderFieldsByDrag = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    const fromIndex = schema.fields.findIndex((f) => f.id === draggedId);
+    const toIndex = schema.fields.findIndex((f) => f.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const newFields = [...schema.fields];
+    const [removed] = newFields.splice(fromIndex, 1);
+    newFields.splice(toIndex, 0, removed);
+    persistSchema({ ...schema, fields: newFields });
   };
 
   const selectedField = schema.fields.find((f) => f.id === selectedFieldId);
@@ -498,9 +539,20 @@ export default function FormBuilderPage() {
                 field={field}
                 index={index}
                 isSelected={selectedFieldId === field.id}
+                isDragging={draggingFieldId === field.id}
+                isDragOver={dragOverFieldId === field.id}
                 onClick={() => setSelectedFieldId(field.id)}
+                onReorder={reorderFieldsByDrag}
+                onDragStateChange={(state) => {
+                  if (state.phase === "start") {
+                    setDraggingFieldId(state.fieldId);
+                  } else if (state.phase === "end") {
+                    setDraggingFieldId(null);
+                    setDragOverFieldId(null);
+                  }
+                }}
+                onDragOverFieldChange={(fieldId) => setDragOverFieldId(fieldId)}
                 onDelete={() => deleteField(field.id)}
-                onMove={moveField}
               />
             ))}
           </div>
@@ -665,6 +717,9 @@ export default function FormBuilderPage() {
               <div className="min-h-full flex items-center justify-center px-8 pt-8 pb-4">
                 {selectedField ? (
                   <div className="w-full max-w-2xl text-center text-white">
+                    {(selectedField.image || selectedField.coverInDb) && (
+                      <FieldCoverImage field={selectedField} formId={formId} />
+                    )}
                     <h2 className="text-3xl font-bold mb-2">{selectedField.label || "Untitled Question"}</h2>
                     {selectedField.placeholder && (
                       <p className="text-blue-100 mb-8">{selectedField.placeholder}</p>
@@ -705,8 +760,10 @@ export default function FormBuilderPage() {
         <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto">
           {selectedField ? (
             <PropertiesPanel
+              formId={formId}
               field={selectedField}
               onUpdate={(updates) => updateField(selectedField.id, updates)}
+              onDelete={() => deleteField(selectedField.id)}
             />
           ) : (
             <FormPropertiesPanel
@@ -750,6 +807,7 @@ export default function FormBuilderPage() {
                   setPreviewFormData({ ...previewFormData, [fieldId]: value });
                 }}
                 readOnly
+                formId={form?.id}
               />
             </div>
           </div>
@@ -1804,26 +1862,38 @@ function ResultsTab({
   );
 }
 
+const FIELD_DRAG_MIME = "application/x-vinforms-field-id";
+
 function BlockItem({
   field,
   index,
   isSelected,
+  isDragging,
+  isDragOver,
   onClick,
+  onReorder,
+  onDragStateChange,
+  onDragOverFieldChange,
   onDelete,
-  onMove,
 }: {
   field: FormField;
   index: number;
   isSelected: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
   onClick: () => void;
+  onReorder: (draggedId: string, targetId: string) => void;
+  onDragStateChange: (state: { phase: "start" | "end"; fieldId: string }) => void;
+  onDragOverFieldChange: (fieldId: string | null) => void;
   onDelete: () => void;
-  onMove: (fieldId: string, direction: "up" | "down") => void;
 }) {
   const getIcon = () => {
     switch (field.type) {
+      case "star_rating":
+        return <Star className="h-4 w-4 text-amber-500 fill-amber-500" />;
       case "radio":
       case "select":
-        return <Star className="h-4 w-4" />;
+        return <FileText className="h-4 w-4" />;
       default:
         return <FileText className="h-4 w-4" />;
     }
@@ -1835,13 +1905,59 @@ function BlockItem({
         "mb-2 p-3 rounded-lg cursor-pointer transition-colors border",
         isSelected
           ? "bg-pink-50 border-pink-300"
-          : "bg-white border-gray-200 hover:border-gray-300"
+          : "bg-white border-gray-200 hover:border-gray-300",
+        isDragging && "opacity-50",
+        isDragOver && "border-primary ring-1 ring-primary/30",
       )}
       onClick={onClick}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onDragOverFieldChange(field.id);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          onDragOverFieldChange(null);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const draggedId = e.dataTransfer.getData(FIELD_DRAG_MIME);
+        if (draggedId && draggedId !== field.id) {
+          onReorder(draggedId, field.id);
+        }
+        onDragStateChange({ phase: "end", fieldId: field.id });
+      }}
     >
       <div className="flex items-start gap-2">
-        <div className="flex items-center gap-1 text-gray-400 mt-0.5">
-          <GripVertical className="h-4 w-4" />
+        <div
+          className="flex items-center gap-1 text-gray-400 mt-0.5 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Drag to reorder question"
+            className="cursor-grab active:cursor-grabbing touch-none rounded p-0.5 hover:bg-gray-100 hover:text-gray-600"
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData(FIELD_DRAG_MIME, field.id);
+              e.dataTransfer.effectAllowed = "move";
+              onDragStateChange({ phase: "start", fieldId: field.id });
+            }}
+            onDragEnd={() => {
+              onDragStateChange({ phase: "end", fieldId: field.id });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+              }
+            }}
+          >
+            <GripVertical className="h-4 w-4 pointer-events-none" />
+          </div>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -1852,6 +1968,20 @@ function BlockItem({
             </span>
           </div>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 text-gray-400 hover:text-destructive"
+          aria-label="Delete question"
+          title="Delete question"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
@@ -1918,8 +2048,8 @@ function renderPreviewField(field: FormField) {
             <SelectValue placeholder={field.placeholder || "Select an option..."} />
           </SelectTrigger>
           <SelectContent>
-            {field.options?.map((opt) => (
-              <SelectItem key={opt} value={opt}>
+            {nonBlankFieldOptions(field.options).map((opt, i) => (
+              <SelectItem key={`${field.id}-opt-${i}`} value={opt}>
                 {opt}
               </SelectItem>
             ))}
@@ -1929,9 +2059,9 @@ function renderPreviewField(field: FormField) {
     case "radio":
       return (
         <div className="space-y-3 w-full">
-          {field.options?.map((opt) => (
+          {nonBlankFieldOptions(field.options).map((opt, i) => (
             <div
-              key={opt}
+              key={`${field.id}-opt-${i}`}
               className="bg-white/20 border border-white/30 rounded-lg p-4 text-left cursor-pointer hover:bg-white/30 transition"
             >
               {opt}
@@ -1949,8 +2079,8 @@ function renderPreviewField(field: FormField) {
     case "multiselect":
       return (
         <div className="space-y-2 w-full text-left">
-          {field.options?.map((opt) => (
-            <div key={opt} className="flex items-center gap-3">
+          {nonBlankFieldOptions(field.options).map((opt, i) => (
+            <div key={`${field.id}-opt-${i}`} className="flex items-center gap-3">
               <div className="h-5 w-5 border-2 border-white/30 rounded bg-white/20" />
               <span className="text-white">{opt}</span>
             </div>
@@ -1984,6 +2114,20 @@ function renderPreviewField(field: FormField) {
           disabled
         />
       );
+    case "star_rating": {
+      const max = getStarRatingMax(field);
+      return (
+        <div className="flex flex-wrap justify-center gap-1">
+          {Array.from({ length: max }, (_, i) => (
+            <Star
+              key={`${field.id}-pv-${i}`}
+              className="h-8 w-8 text-white/35"
+              strokeWidth={1.5}
+            />
+          ))}
+        </div>
+      );
+    }
     default:
       return (
         <Input
@@ -1997,16 +2141,99 @@ function renderPreviewField(field: FormField) {
 }
 
 function PropertiesPanel({
+  formId,
   field,
   onUpdate,
+  onDelete,
 }: {
+  formId: string | undefined;
   field: FormField;
   onUpdate: (updates: Partial<FormField>) => void;
+  onDelete: () => void;
 }) {
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("center");
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const { toast } = useToast();
+
+  const handleCoverFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !formId) {
+      if (!formId) {
+        toast({
+          title: "Save the form first",
+          description: "Cover image requires a saved form.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    if (file.type !== "image/jpeg" && file.type !== "image/png") {
+      toast({
+        title: "Invalid file",
+        description: "Use a JPEG or PNG image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size >= MAX_FORM_FIELD_COVER_BYTES) {
+      toast({
+        title: "File too large",
+        description: "Image must be smaller than 1MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCoverUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      void (async () => {
+        try {
+          const dataUrl = reader.result as string;
+          const comma = dataUrl.indexOf(",");
+          const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : "";
+          if (!base64) {
+            throw new Error("Could not read image");
+          }
+          await setFormFieldCoverImage({
+            formId,
+            fieldId: field.id,
+            mimeType: file.type as "image/jpeg" | "image/png",
+            fileBase64: base64,
+          });
+          onUpdate({ coverInDb: true, image: undefined });
+          toast({ title: "Cover image saved" });
+        } catch (err) {
+          console.error(err);
+          toast({
+            title: "Upload failed",
+            description:
+              err instanceof Error ? err.message : "Could not save cover image",
+            variant: "destructive",
+          });
+        } finally {
+          setIsCoverUploading(false);
+        }
+      })();
+    };
+    reader.onerror = () => {
+      setIsCoverUploading(false);
+      toast({
+        title: "Read failed",
+        description: "Could not read the selected file.",
+        variant: "destructive",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="p-6 space-y-6">
+      <h3 className="text-sm font-semibold text-gray-900">Question</h3>
       <div>
         <Label className="text-sm font-medium mb-2 block">Title</Label>
         <Input
@@ -2044,7 +2271,14 @@ function PropertiesPanel({
         <Label className="text-sm font-medium mb-2 block">Field Type</Label>
         <Select
           value={field.type}
-          onValueChange={(value) => onUpdate({ type: value as FieldType })}
+          onValueChange={(value) => {
+            const t = value as FieldType;
+            if (t === "star_rating") {
+              onUpdate({ type: t, maxStars: field.maxStars ?? 10 });
+            } else {
+              onUpdate({ type: t });
+            }
+          }}
         >
           <SelectTrigger>
             <SelectValue />
@@ -2057,10 +2291,33 @@ function PropertiesPanel({
             <SelectItem value="select">Select</SelectItem>
             <SelectItem value="radio">Radio</SelectItem>
             <SelectItem value="checkbox">Checkbox</SelectItem>
+            <SelectItem value="star_rating">Star rating</SelectItem>
             <SelectItem value="date">Date</SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      {field.type === "star_rating" && (
+        <div>
+          <Label className="text-sm font-medium mb-2 block">Max stars</Label>
+          <Select
+            value={String(getStarRatingMax(field))}
+            onValueChange={(v) => onUpdate({ maxStars: parseInt(v, 10) })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-500 mt-1">Respondents tap a star from 1 up to this maximum.</p>
+        </div>
+      )}
 
       {(field.type === "select" || field.type === "radio") && (
         <div>
@@ -2069,7 +2326,7 @@ function PropertiesPanel({
             value={field.options?.join("\n") || ""}
             onChange={(e) =>
               onUpdate({
-                options: e.target.value.split("\n").filter((o) => o.trim()),
+                options: e.target.value.split("\n"),
               })
             }
             className="w-full"
@@ -2115,10 +2372,76 @@ function PropertiesPanel({
 
       <div>
         <Label className="text-sm font-medium mb-2 block">Cover Image</Label>
-        <Button variant="outline" className="w-full">
-          <ImageIcon className="h-4 w-4 mr-2" />
-          Select Image
+        <input
+          ref={coverFileInputRef}
+          type="file"
+          accept="image/jpeg,image/png"
+          className="hidden"
+          onChange={handleCoverFileChange}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={isCoverUploading}
+          onClick={() => coverFileInputRef.current?.click()}
+        >
+          {isCoverUploading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Uploading…
+            </>
+          ) : (
+            <>
+              <ImageIcon className="h-4 w-4 mr-2" />
+              Select Image
+            </>
+          )}
         </Button>
+        <p className="text-xs text-gray-500 mt-2">
+          JPEG or PNG, under 1MB (stored in the database). Or paste an image URL below.
+        </p>
+        <Label className="text-sm font-medium mb-2 mt-3 block">Image URL (optional)</Label>
+        <Input
+          value={field.image ?? ""}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            if (v && field.coverInDb && formId) {
+              deleteFormFieldCoverImage({ formId, fieldId: field.id }).catch(() => {});
+            }
+            onUpdate({
+              image: v || undefined,
+              ...(v ? { coverInDb: false } : {}),
+            });
+          }}
+          placeholder="https://example.com/image.jpg"
+          className="w-full"
+        />
+        {(field.image || field.coverInDb) && (
+          <div className="mt-3 space-y-2">
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-2 flex justify-center max-h-40 overflow-hidden">
+              <FieldCoverImage field={field} formId={formId} />
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full text-destructive"
+              onClick={() => {
+                void (async () => {
+                  if (formId) {
+                    await deleteFormFieldCoverImage({ formId, fieldId: field.id }).catch(
+                      () => {},
+                    );
+                  }
+                  onUpdate({ image: undefined, coverInDb: false });
+                })();
+              }}
+            >
+              Remove cover image
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -2128,6 +2451,17 @@ function PropertiesPanel({
         />
         <Label>Required</Label>
       </div>
+
+      <Separator />
+      <Button
+        type="button"
+        variant="destructive"
+        className="w-full"
+        onClick={onDelete}
+      >
+        <Trash2 className="h-4 w-4 mr-2" />
+        Delete this question
+      </Button>
     </div>
   );
 }
