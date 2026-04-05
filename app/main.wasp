@@ -417,6 +417,21 @@ query getPublicForm {
   entities: [Form]
 }
 
+query getFormFieldCoverImage {
+  fn: import { getFormFieldCoverImage } from "@src/forms/operations",
+  entities: [Form, FormFieldCoverImage]
+}
+
+action setFormFieldCoverImage {
+  fn: import { setFormFieldCoverImage } from "@src/forms/operations",
+  entities: [User, Form, Workspace, Organization, OrganizationMember, FormFieldCoverImage]
+}
+
+action deleteFormFieldCoverImage {
+  fn: import { deleteFormFieldCoverImage } from "@src/forms/operations",
+  entities: [User, Form, Workspace, Organization, OrganizationMember, FormFieldCoverImage]
+}
+
 action createForm {
   fn: import { createForm } from "@src/forms/operations",
   entities: [User, Form, Workspace, Organization, OrganizationMember]

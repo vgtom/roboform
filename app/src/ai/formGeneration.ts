@@ -84,7 +84,7 @@ Return ONLY valid JSON matching this structure:
   "fields": [
     {
       "id": "unique-id",
-      "type": "text|textarea|email|number|select|multiselect|radio|checkbox|date|file",
+      "type": "text|textarea|email|number|select|multiselect|radio|checkbox|star_rating|date|file",
       "label": "Field Label",
       "placeholder": "Optional placeholder",
       "required": true/false,
@@ -102,6 +102,7 @@ Field types:
 - multiselect: Multiple checkboxes
 - radio: Radio buttons
 - checkbox: Single checkbox
+- star_rating: 1–10 star rating; set maxStars 1–10 as needed
 - date: Date picker
 - file: File upload
 

@@ -192,10 +192,28 @@ model Form {
   responseFields            FormResponseField[]
   integrations              FormIntegration[]
   analytics                 FormAnalytics?
+  fieldCoverImages          FormFieldCoverImage[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
   @@index([slug])
+}
+
+/// Per-question cover image stored in Postgres (BYTEA), max 1MB enforced in app code.
+model FormFieldCoverImage {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formId    String
+  fieldId   String
+
+  imageData Bytes
+  mimeType  String
+
+  @@unique([formId, fieldId])
+  @@index([formId])
 }
 
 model FormResponse {

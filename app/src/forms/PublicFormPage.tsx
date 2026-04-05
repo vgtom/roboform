@@ -98,6 +98,7 @@ export default function PublicFormPage() {
               onSubmit={handleSubmit}
               isSubmitting={isSubmitting}
               submitted={submitted}
+              formId={form.id}
             />
           </div>
         </div>
